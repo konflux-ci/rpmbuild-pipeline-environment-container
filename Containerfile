@@ -8,3 +8,5 @@ RUN \
     dnf -y clean all && \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
+
+ADD gather-rpms.py /usr/bin
