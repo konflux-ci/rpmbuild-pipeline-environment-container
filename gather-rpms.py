@@ -31,7 +31,7 @@ current_time = datetime.datetime.now()
 def parse_NEVRA(nevra):
     try:
         nevra = koji.parse_NVRA(nevra)
-    except ValueError:
+    except koji.GenericError:
         # e.g. gpg-pubkey package
         nevra = koji.parse_NVR(nevra)
         nevra['arch'] = None
