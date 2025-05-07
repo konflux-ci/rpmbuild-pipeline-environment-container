@@ -13,4 +13,6 @@ RUN \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
 
+ADD site-defaults.cfg /etc/mock/site-defaults.cfg
+
 ADD gather-rpms.py /usr/bin
