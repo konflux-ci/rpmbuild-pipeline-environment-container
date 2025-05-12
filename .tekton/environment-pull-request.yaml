@@ -44,6 +44,8 @@ spec:
         value: main
       - name: pathInRepo
         value: .tekton/multi-arch-build-pipeline.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-environment
   workspaces:
   - name: git-auth
     secret:
