@@ -6,7 +6,7 @@ VOLUME /var/lib/containers
 ADD rpmdiff.patch /rpmdiff.patch
 
 RUN \
-    dnf -y install mock koji dist-git-client patch && \
+    dnf -y install mock koji dist-git-client patch python3-specfile && \
     patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
