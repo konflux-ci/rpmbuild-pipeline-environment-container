@@ -16,3 +16,4 @@ RUN \
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD gather-rpms.py /usr/bin
+ADD pulp-upload.py /usr/bin
