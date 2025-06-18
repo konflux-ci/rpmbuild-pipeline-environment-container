@@ -10,9 +10,10 @@ import os
 import time
 import tomllib
 import json
-import sys
 from urllib.parse import urlencode
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 import datetime
 import logging
 
@@ -37,7 +38,7 @@ class PulpClient:
     """
 
     @classmethod
-    def create_from_config_file(cls, path=None):
+    def create_from_config_file(cls, path=None, domain=None):
         """
         Create a Pulp client from a standard configuration file that is
         used by the `pulp` CLI tool
@@ -45,11 +46,30 @@ class PulpClient:
         path = os.path.expanduser(path or "~/.config/pulp/cli.toml")
         with open(path, "rb") as fp:
             config = tomllib.load(fp)
-        return cls(config["cli"])
+        return cls(config["cli"], domain)
 
-    def __init__(self, config):
+    def __init__(self, config, domain=None):
+        self.domain = domain
         self.config = config
         self.timeout = 60
+        retry_strategy = Retry(
+            total=4,  # maximum number of retries
+            backoff_factor=2,
+            status_forcelist=[
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],  # the HTTP status codes to retry on
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+
+        # create a new session object
+        self.session = requests.Session()
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     @property
     def headers(self):
@@ -74,9 +94,10 @@ class PulpClient:
         """
         A fully qualified URL for a given API endpoint
         """
-        domain = self.config["domain"]
-        # if domain == "default":
-        #     domain = ""
+        if self.domain:
+            domain = f"{self.domain}".replace("-tenant", "")
+        else:
+            domain = self.config["domain"]
 
         relative = os.path.normpath("/".join([
             self.config["api_root"],
@@ -110,7 +131,7 @@ class PulpClient:
         """
         url = self.url("api/v3/repositories/rpm/rpm/")
         data = {"name": name, "autopublish": True}
-        return requests.post(url, json=data, **self.request_params)
+        return self.session.post(url, json=data, **self.request_params)
 
     def get_rpm_repository(self, name):
         """
@@ -121,7 +142,7 @@ class PulpClient:
         # even Pulp CLI does this workaround
         url = self.url("api/v3/repositories/rpm/rpm/?")
         url += urlencode({"name": name, "offset": 0, "limit": 1})
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
 
     def get_distribution(self, name):
         """
@@ -132,14 +153,14 @@ class PulpClient:
         # even Pulp CLI does this workaround
         url = self.url("api/v3/distributions/rpm/rpm/?")
         url += urlencode({"name": name, "offset": 0, "limit": 1})
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
 
     def get_task(self, task):
         """
         Get a detailed information about a task
         """
         url = self.config["base_url"] + task
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
 
     def create_rpm_distribution(self, name, repository, basepath=None):
         """
@@ -152,19 +173,30 @@ class PulpClient:
             "repository": repository,
             "base_path": basepath or name,
         }
-        return requests.post(url, json=data, **self.request_params)
+        return self.session.post(url, json=data, **self.request_params)
 
-    def create_rpm_content(self, repository, path, pulp_label):
+    def create_rpm_content(self, path, pulp_label):
         """
         Create content for a given artifact
         https://docs.pulpproject.org/pulp_rpm/restapi.html#tag/Content:-Packages/operation/content_rpm_packages_create
         """
-        url = self.url("api/v3/content/rpm/packages/")
+        url = self.url("api/v3/content/rpm/rpmpackages/")
         with open(path, "rb") as fp:
-            data = {"repository": repository, "pulp_labels": json.dumps(pulp_label)}
+            data = {"pulp_labels": json.dumps(pulp_label)}
             files = {"file": fp}
-            return requests.post(
+            package =  self.session.post(
                 url, data=data, files=files, **self.request_params)
+        return package
+
+    def add_content(self, repository, artifacts):
+        """
+        Add a list of artifacts to a repository
+        https://pulpproject.org/pulp_rpm/restapi/#tag/Repositories:-Rpm/operation/repositories_rpm_rpm_modify
+        """
+        path = os.path.join(repository, "modify/")
+        url = self.config["base_url"] + path
+        data = {"add_content_units": artifacts}
+        return self.session.post(url, json=data, **self.request_params)
 
     def create_file_repository(self, name):
         """
@@ -173,7 +205,7 @@ class PulpClient:
         """
         url = self.url("api/v3/repositories/file/file/")
         data = {"name": name, "autopublish": True}
-        return requests.post(url, json=data, **self.request_params)
+        return self.session.post(url, json=data, **self.request_params)
 
     def get_file_repository(self, name):
         """
@@ -184,7 +216,7 @@ class PulpClient:
         # even Pulp CLI does this workaround
         url = self.url("api/v3/repositories/file/file/?")
         url += urlencode({"name": name, "offset": 0, "limit": 1})
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
 
     def create_file_distribution(self, name, repository, basepath=None):
         """
@@ -197,7 +229,7 @@ class PulpClient:
             "repository": repository,
             "base_path": basepath or name,
         }
-        return requests.post(url, json=data, **self.request_params)
+        return self.session.post(url, json=data, **self.request_params)
 
     def create_file_content(self, repository, path, build_id, pulp_label):
         """
@@ -211,7 +243,7 @@ class PulpClient:
             file_name = path.split("/")[-1]
             data = {"repository": repository, "relative_path": f"{build_id}/{file_name}", "pulp_labels": json.dumps(pulp_label)}
             files = {"file": fp}
-            return requests.post(
+            return self.session.post(
                 url, data=data, files=files, **self.request_params)
 
     def wait_for_finished_task(self, task, timeout=86400):
@@ -225,7 +257,7 @@ class PulpClient:
             logging.info(f"Waiting for {task} to finish.")
             response = self.get_task(task)
             if not response.ok:
-                logging.error(f"There was an error processing the task: {response}")
+                logging.error(f"There was an error processing the task: {response.text}")
                 break
             if response.json()["state"] not in ["waiting", "running"]:
                 break
@@ -233,29 +265,31 @@ class PulpClient:
                 logging.error(f"Timed out waiting for {task}")
                 break
             time.sleep(5)
+        logging.info(f"Task finished: {task}")
         return response
 
     def find_content_by_build_id(self, build_id):
         url = self.url(f"api/v3/content/?pulp_label_select=build_id~{build_id}")
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
 
     def get_file_locations(self, artifacts):
         hrefs = [list(artifact.values())[0] for artifact in artifacts]
         hrefs_string = ','.join(hrefs)
         url = self.url(f"api/v3/artifacts/?pulp_href__in={hrefs_string}")
-        return requests.get(url, **self.request_params)
+        return self.session.get(url, **self.request_params)
     
-def upload_rpm(client, rpm_repository_prn, rpm, labels):
+def create_rpm_content(client, rpm, labels):
     logging.info(f"Uploading rpm file: {rpm}")
-    content_upload_response = client.create_rpm_content(rpm_repository_prn, rpm, labels)
-    client.wait_for_finished_task(content_upload_response.json()['task'])
+    content_upload_response = client.create_rpm_content(rpm, labels)
+    check_response(content_upload_response)
+    return content_upload_response.json()["pulp_href"]
     
 def upload_log(client, file_repository_prn, log, build_id, labels):
     logging.info(f"Uploading log file: {log}")
     content_upload_response = client.create_file_content(file_repository_prn, log, build_id, labels)
     client.wait_for_finished_task(content_upload_response.json()['task'])
     
-def upload_rpms_logs(rpm_path, args, client, arch, rpm_repository_prn, file_repository_prn):
+def upload_rpms_logs(rpm_path, args, client, arch, rpm_repository_href, file_repository_prn):
     rpms = glob.glob(os.path.join(rpm_path,"*.rpm"))
     logs = glob.glob(os.path.join(rpm_path,"*.log"))
 
@@ -268,11 +302,16 @@ def upload_rpms_logs(rpm_path, args, client, arch, rpm_repository_prn, file_repo
     }
     to_await = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        to_await.extend([executor.submit(upload_rpm, client, rpm_repository_prn, rpm, labels) for rpm in rpms])
-        to_await.extend([executor.submit(upload_log, client, file_repository_prn, log, args.build_id, labels) for log in logs])
-        results = [future.result() for future in concurrent.futures.as_completed(to_await)]
+        to_await = [executor.submit(create_rpm_content, client, rpm, labels) for rpm in rpms]
+        rpm_results_artifacts = [future.result() for future in concurrent.futures.as_completed(to_await)]
 
-def collect_results(client, build_id):
+    for log in logs:
+        upload_log(client, file_repository_prn, log, args.build_id, labels)
+
+    rpm_repo_results = client.add_content(rpm_repository_href, rpm_results_artifacts)
+    client.wait_for_finished_task(rpm_repo_results.json()['task'])
+
+def collect_results(client, build_id, output_json):
     # Collect results
     resp_json = client.find_content_by_build_id(build_id).json()
 
@@ -289,8 +328,8 @@ def collect_results(client, build_id):
                 results[list(artifact.keys())[0]] = file["file"]
 
     # write to a results file
-    with open("pulp_results.json", "w") as outfile:
-        logging.info(f"Writing Quay URL results to pulp_results.json")
+    with open(output_json, "w") as outfile:
+        logging.info(f"Writing Quay URL results to {output_json}")
         outfile.write(json.dumps(results, indent = 2))
 
 def upload_sbom(client, args):
@@ -306,8 +345,7 @@ def upload_sbom(client, args):
 
 def check_response(request):
     if not request.ok:
-        logging.error(f"An error occured while completing a request: {request.text}")
-        sys.exit(1)
+        logging.info(f"An error occured while completing a request: {request.text}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create a pulp repository and distribution.")
@@ -318,6 +356,8 @@ if __name__ == "__main__":
     parser.add_argument("--build_id", type=str, help="Build id for this run")
     parser.add_argument("--namespace", type=str, help="Namespace this is running out of")
     parser.add_argument("--parent_package", type=str, help="Parent package this is ran for")
+    parser.add_argument("--domain", type=str, help="Domain to use for uploading")
+    parser.add_argument("--output_json", type=str, help="Where to create the pulp_results json")
     parser.add_argument("-d", "--debug", default=False, action="store_true",
                         help="Debugging output")
     now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -327,13 +367,14 @@ if __name__ == "__main__":
     repository_name = args.repository_name
     rpm_path = args.rpm_path
     config_path = args.config or None
+    domain = args.domain or None
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
 
-    client = PulpClient.create_from_config_file(path=config_path)
+    client = PulpClient.create_from_config_file(path=config_path, domain=domain)
 
     # Create rpm repository
     logging.info("Creating the RPM repository if needed")
@@ -346,6 +387,7 @@ if __name__ == "__main__":
 
     # Get the pulp_href for the rpm repository
     rpm_repository_prn = repository_response.json()["results"][0]["prn"]
+    rpm_repository_href = repository_response.json()["results"][0]["pulp_href"]
 
     # Create an rpm distribution
     logging.info("Creating the RPM distribution if needed")
@@ -389,7 +431,7 @@ if __name__ == "__main__":
     archs = ["x86_64", "aarch64", "s390x", "ppc64le"]
     for arch in archs:
         current_path = f"{rpm_path}/{arch}"
-        upload_rpms_logs(current_path, args, client, arch, rpm_repository_prn, file_repository_prn)
+        upload_rpms_logs(current_path, args, client, arch, rpm_repository_href, file_repository_prn)
 
     upload_sbom(client, args)
-    collect_results(client, args.build_id)
+    collect_results(client, args.build_id, args.output_json)
