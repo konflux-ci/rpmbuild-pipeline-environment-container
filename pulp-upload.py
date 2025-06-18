@@ -37,7 +37,7 @@ class PulpClient:
     """
 
     @classmethod
-    def create_from_config_file(cls, path=None):
+    def create_from_config_file(cls, path=None, domain=None):
         """
         Create a Pulp client from a standard configuration file that is
         used by the `pulp` CLI tool
@@ -45,9 +45,10 @@ class PulpClient:
         path = os.path.expanduser(path or "~/.config/pulp/cli.toml")
         with open(path, "rb") as fp:
             config = tomllib.load(fp)
-        return cls(config["cli"])
+        return cls(config["cli"], domain)
 
-    def __init__(self, config):
+    def __init__(self, config, domain=None):
+        self.domain = domain
         self.config = config
         self.timeout = 60
 
@@ -74,9 +75,10 @@ class PulpClient:
         """
         A fully qualified URL for a given API endpoint
         """
-        domain = self.config["domain"]
-        # if domain == "default":
-        #     domain = ""
+        if self.domain:
+            domain = f"{self.domain}".replace("-tenant", "")
+        else:
+            domain = self.config["domain"]
 
         relative = os.path.normpath("/".join([
             self.config["api_root"],
@@ -225,7 +227,7 @@ class PulpClient:
             logging.info(f"Waiting for {task} to finish.")
             response = self.get_task(task)
             if not response.ok:
-                logging.error(f"There was an error processing the task: {response}")
+                logging.error(f"There was an error processing the task: {response.text}")
                 break
             if response.json()["state"] not in ["waiting", "running"]:
                 break
@@ -272,7 +274,7 @@ def upload_rpms_logs(rpm_path, args, client, arch, rpm_repository_prn, file_repo
         to_await.extend([executor.submit(upload_log, client, file_repository_prn, log, args.build_id, labels) for log in logs])
         results = [future.result() for future in concurrent.futures.as_completed(to_await)]
 
-def collect_results(client, build_id):
+def collect_results(client, build_id, output_json):
     # Collect results
     resp_json = client.find_content_by_build_id(build_id).json()
 
@@ -289,8 +291,8 @@ def collect_results(client, build_id):
                 results[list(artifact.keys())[0]] = file["file"]
 
     # write to a results file
-    with open("pulp_results.json", "w") as outfile:
-        logging.info(f"Writing Quay URL results to pulp_results.json")
+    with open(output_json, "w") as outfile:
+        logging.info(f"Writing Quay URL results to {output_json}")
         outfile.write(json.dumps(results, indent = 2))
 
 def upload_sbom(client, args):
@@ -306,8 +308,7 @@ def upload_sbom(client, args):
 
 def check_response(request):
     if not request.ok:
-        logging.error(f"An error occured while completing a request: {request.text}")
-        sys.exit(1)
+        logging.info(f"An error occured while completing a request: {request.text}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create a pulp repository and distribution.")
@@ -318,6 +319,8 @@ if __name__ == "__main__":
     parser.add_argument("--build_id", type=str, help="Build id for this run")
     parser.add_argument("--namespace", type=str, help="Namespace this is running out of")
     parser.add_argument("--parent_package", type=str, help="Parent package this is ran for")
+    parser.add_argument("--domain", type=str, help="Domain to use for uploading")
+    parser.add_argument("--output_json", type=str, help="Where to create the pulp_results json")
     parser.add_argument("-d", "--debug", default=False, action="store_true",
                         help="Debugging output")
     now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -327,13 +330,14 @@ if __name__ == "__main__":
     repository_name = args.repository_name
     rpm_path = args.rpm_path
     config_path = args.config or None
+    domain = args.domain or None
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
 
-    client = PulpClient.create_from_config_file(path=config_path)
+    client = PulpClient.create_from_config_file(path=config_path, domain=domain)
 
     # Create rpm repository
     logging.info("Creating the RPM repository if needed")
@@ -392,4 +396,4 @@ if __name__ == "__main__":
         upload_rpms_logs(current_path, args, client, arch, rpm_repository_prn, file_repository_prn)
 
     upload_sbom(client, args)
-    collect_results(client, args.build_id)
+    collect_results(client, args.build_id, args.output_json)
