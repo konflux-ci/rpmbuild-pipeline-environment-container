@@ -4,7 +4,6 @@ import glob
 import json
 import os
 import random
-import sys
 from specfile import Specfile
 
 
@@ -56,15 +55,17 @@ def get_specfile():
 
 def get_params():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hermetic', default='false')
-    parser.add_argument('--results-file')
+    parser.add_argument('selected_architectures', nargs='+', help="List of selected architectures")
+    parser.add_argument('--hermetic', action="store_true", default=False,
+                        help="If existing, use hermetic build")
+    parser.add_argument('--results-file', required=True, help="Path to result filename")
     args = parser.parse_args()
     return args
 
 
 args = get_params()
 
-selected_architectures = sys.argv[1:]
+selected_architectures = args.selected_architectures
 print(f"Trying to build for {selected_architectures}")
 
 spec = get_specfile()
@@ -119,7 +120,7 @@ for key in architecture_decision.keys():
     print(f"disabling {key} because it is not a selected architecture")
     architecture_decision[key] = "localhost"
 
-print("Writing into ", args.results_file)
+print(f"Writing into {args.results_file}")
 with open(args.results_file, "w") as fd:
     json.dump(architecture_decision, fd)
 print(json.dumps(architecture_decision))

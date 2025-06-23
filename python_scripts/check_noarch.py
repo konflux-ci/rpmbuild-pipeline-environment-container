@@ -1,13 +1,25 @@
 #!/usr/bin/python3
+import argparse
 import os
 import sys
 
 from koji.rpmdiff import Rpmdiff
 
+
+def get_params():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--results-dir', default='/var/workdir/results',
+                        help="Path to results directory")
+    args = parser.parse_args()
+    return args
+
+
+args = get_params()
+
 noarch_files = {}
 
 errors = 0
-for root, _, files in os.walk('/var/workdir/results'):
+for root, _, files in os.walk(args.results_dir):
     for fname in files:
         if fname.endswith('.noarch.rpm'):
             fpath = os.path.join(root, fname)
