@@ -16,7 +16,16 @@ STAGING_DIR = "oras-staging"
 CG_IMPORT_JSON = "cg_import.json"
 SBOM_JSON = "sbom-spdx.json"
 NVR_FILE = "nvr.log"
-# TODO - repo_id, maybe whole mock-config
+
+# This is a metadata file that can be offered by RHEL/Fedora pipeline flavors
+# that employ Koji buildroots. The file provides info related to the utilized
+# Koji buildroot. The expected file format is JSON with key-value pairs:
+# repo_id: koji build repo id
+# buildroot_tag: koji build tag
+# event_id: koji event id of build repo creation
+# {"repo_id": <repo_id>, "buildroot_tag": <buildroot_tag>, "event_id": <event_id>}
+KOJI_BUILDROOT_METADATA_FILE = "/tmp/konflux-extra-koji-metadata.json"
+
 # TODO - pipeline_url
 
 srpm = None
@@ -142,6 +151,18 @@ def prepare_arch_data():
         handle_archdir(arch)
 
 
+def get_metadata():
+    """
+    Gather data from temp koji metadata file.
+    """
+    if os.path.exists(KOJI_BUILDROOT_METADATA_FILE):
+        with open(KOJI_BUILDROOT_METADATA_FILE, "r", encoding="utf-8") as fo:
+            metadata = fo.read()
+        return json.loads(metadata)
+
+    return {}
+
+
 def generate_oras_filelist():
     # generate oras filelists
     with open('oras-push-list.txt', 'wt') as f:
@@ -169,7 +190,7 @@ def sha256sum(path: str):
 
 
 # create cg_import.json
-def create_md_file(options):
+def create_md_file(options, extra_metadata=None):
     path = os.path.join(STAGING_DIR, srpm)
     nevr = koji.get_header_fields(path, ['name', 'version', 'epoch', 'release'])
     extra = {
@@ -184,6 +205,12 @@ def create_md_file(options):
             "rpm": None,
         }
     }
+
+    # only add these entries if extra_metadata exists
+    # see KOJI_BUILDROOT_METADATA_FILE for more information
+    if extra_metadata:
+        for key in extra_metadata:
+            extra["_export_source"][key] = extra_metadata[key]
 
     build = {
         "name": nevr["name"],
@@ -514,8 +541,10 @@ if __name__ == "__main__":
 
     logging.info("Preparing arch data")
     prepare_arch_data()
+    logging.info("Gathering extra metadata")
+    extra_metadata = get_metadata()
     logging.info("Creating md file")
-    create_md_file(options)
+    create_md_file(options, extra_metadata)
     logging.info("Creating SBOM")
     create_sbom()
     logging.info("Generating oras filelist")
