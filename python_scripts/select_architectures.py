@@ -9,6 +9,8 @@ import re
 import rpm
 from specfile import Specfile
 
+WORKDIR = '/var/workdir/source'
+
 
 def safe_attr(name, tags):
     """
@@ -74,8 +76,8 @@ def get_macros(specfile_path):
     return macros
 
 
-def get_specfile():
-    specfile_path = glob.glob(os.path.join('/var/workdir/source', '*.spec'))
+def get_specfile(workdir=WORKDIR):
+    specfile_path = glob.glob(os.path.join(workdir, '*.spec'))
 
     if len(specfile_path) == 0:
         raise RuntimeError("no spec file available")
@@ -100,7 +102,10 @@ def get_params():
     parser.add_argument('selected_architectures', nargs='+', help="List of selected architectures")
     parser.add_argument('--hermetic', action="store_true", default=False,
                         help="If existing, use hermetic build")
-    parser.add_argument('--results-file', required=True, help="Path to result filename")
+    parser.add_argument('--results-file', help="Path to result filename")
+    parser.add_argument("--workdir", default=WORKDIR,
+                        help=("Working directory where we read/write files "
+                              f"(default {WORKDIR})"))
     args = parser.parse_args()
     return args
 
@@ -108,10 +113,14 @@ def get_params():
 def _main():
     args = get_params()
 
+    output_file = os.path.join(args.workdir, "selected-architectures.json")
+    if args.results_file:
+        output_file = args.results_file
+
     selected_architectures = args.selected_architectures
     print(f"Trying to build for {selected_architectures}")
 
-    spec = get_specfile()
+    spec = get_specfile(args.workdir)
 
     # pylint: disable=no-member
     tags = spec.tags(spec.parsed_sections.package).content
@@ -164,8 +173,8 @@ def _main():
         print(f"disabling {key} because it is not a selected architecture")
         architecture_decision[key] = "localhost"
 
-    print(f"Writing into {args.results_file}")
-    with open(args.results_file, "w", encoding="utf-8") as fd:
+    print(f"Writing into {output_file}")
+    with open(output_file, "w", encoding="utf-8") as fd:
         json.dump(architecture_decision, fd)
     print(json.dumps(architecture_decision))
 
