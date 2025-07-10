@@ -104,64 +104,69 @@ def get_params():
     return args
 
 
-args = get_params()
+def _main():
+    args = get_params()
 
-selected_architectures = args.selected_architectures
-print(f"Trying to build for {selected_architectures}")
+    selected_architectures = args.selected_architectures
+    print(f"Trying to build for {selected_architectures}")
 
-spec = get_specfile()
+    spec = get_specfile()
 
-tags = spec.tags(spec.parsed_sections.package).content
-arches = {}
-for name in ['exclusivearch', 'excludearch', 'buildarch']:
-    arches[name] = get_arches(name, tags)
+    tags = spec.tags(spec.parsed_sections.package).content
+    arches = {}
+    for name in ['exclusivearch', 'excludearch', 'buildarch']:
+        arches[name] = get_arches(name, tags)
 
-architecture_decision = {
-    "deps-x86_64": "linux/amd64",
-    "deps-i686": "linux/amd64",
-    "deps-aarch64": "linux/arm64",
-    "deps-s390x": "linux/s390x",
-    "deps-ppc64le": "linux/ppc64le",
-    "build-x86_64": "linux/amd64",
-    "build-i686": "linux/amd64",
-    "build-aarch64": "linux/arm64",
-    "build-s390x": "linux/s390x",
-    "build-ppc64le": "linux/ppc64le",
-}
+    architecture_decision = {
+        "deps-x86_64": "linux/amd64",
+        "deps-i686": "linux/amd64",
+        "deps-aarch64": "linux/arm64",
+        "deps-s390x": "linux/s390x",
+        "deps-ppc64le": "linux/ppc64le",
+        "build-x86_64": "linux/amd64",
+        "build-i686": "linux/amd64",
+        "build-aarch64": "linux/arm64",
+        "build-s390x": "linux/s390x",
+        "build-ppc64le": "linux/ppc64le",
+    }
 
-# Set the value to 'localhost' if you want to skip the corresponding
-# task (the tasks are modified so they do nothing on localhost).
-if not args.hermetic:
+    # Set the value to 'localhost' if you want to skip the corresponding
+    # task (the tasks are modified so they do nothing on localhost).
+    if not args.hermetic:
+        for key in architecture_decision.keys():
+            if key.startswith("deps-"):
+                print(f"non-hermetic build, disabling {key} task")
+                architecture_decision[key] = "localhost"
+    if arches == ['noarch']:
+        # when exclusivearch
+        if arches['exclusivearch']:
+            build_arches = arches['exclusivearch']
+            # remove excludeArches
+            build_arches = list(set(build_arches) - set(arches['excludearch']))
+        else:
+            # default build arches
+            build_arches = ['x86_64', 'i686', 'aarch64', 's390x', 'ppc64le']
+            # build arches without excludeArch
+            build_arches = list(set(build_arches) - set(arches['excludearch']))
+        selected_architectures = [random.choice(build_arches)]
+
+    # skip disabled architectures
     for key in architecture_decision.keys():
-        if key.startswith("deps-"):
-            print(f"non-hermetic build, disabling {key} task")
-            architecture_decision[key] = "localhost"
-if arches == ['noarch']:
-    # when exclusivearch
-    if arches['exclusivearch']:
-        build_arches = arches['exclusivearch']
-        # remove excludeArches
-        build_arches = list(set(build_arches) - set(arches['excludearch']))
-    else:
-        # default build arches
-        build_arches = ['x86_64', 'i686', 'aarch64', 's390x', 'ppc64le']
-        # build arches without excludeArch
-        build_arches = list(set(build_arches) - set(arches['excludearch']))
-    selected_architectures = [random.choice(build_arches)]
+        found = False
+        for arch_ok in selected_architectures:
+            if key.endswith("-" + arch_ok):
+                found = True
+                break
+        if found:
+            continue
+        print(f"disabling {key} because it is not a selected architecture")
+        architecture_decision[key] = "localhost"
 
-# skip disabled architectures
-for key in architecture_decision.keys():
-    found = False
-    for arch_ok in selected_architectures:
-        if key.endswith("-" + arch_ok):
-            found = True
-            break
-    if found:
-        continue
-    print(f"disabling {key} because it is not a selected architecture")
-    architecture_decision[key] = "localhost"
+    print(f"Writing into {args.results_file}")
+    with open(args.results_file, "w") as fd:
+        json.dump(architecture_decision, fd)
+    print(json.dumps(architecture_decision))
 
-print(f"Writing into {args.results_file}")
-with open(args.results_file, "w") as fd:
-    json.dump(architecture_decision, fd)
-print(json.dumps(architecture_decision))
+
+if __name__ == "__main__":
+    _main()
