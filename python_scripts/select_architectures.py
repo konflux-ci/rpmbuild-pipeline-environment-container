@@ -55,6 +55,7 @@ def get_macros(specfile_path):
     if tuple(int(i) for i in rpm.__version_info__) < (4, 19, 90):
         return
 
+    print(f"Checking {specfile_path} for %patchN statements")
     try:
         with open(specfile_path, "rb") as specfile:
             # Find all uses of %patchN in the spec files
@@ -63,8 +64,9 @@ def get_macros(specfile_path):
             for patch in re.findall(b"%{?patch(\\d+)\\b", specfile.read()):
                 # We operate on bytes because we don't know the spec encoding
                 # but the matched part only includes ASCII digits
-                patch = patch.decode("ascii")
-                macros.append((f"patch{patch}", "%dnl"))
+                patch = f"patch{patch.decode('ascii')}"
+                print(f"Defining '%{patch} %dnl' macro")
+                macros.append((patch, "%dnl"))
     except OSError:
         pass
 
