@@ -174,9 +174,10 @@ def _main():
         architecture_decision[key] = "localhost"
 
     print(f"Writing into {output_file}")
+    content = json.dumps(architecture_decision, indent=4) + "\n"
+    print(content, end="")
     with open(output_file, "w", encoding="utf-8") as fd:
-        json.dump(architecture_decision, fd)
-    print(json.dumps(architecture_decision))
+        fd.write(content)
 
 
 if __name__ == "__main__":
