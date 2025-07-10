@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+
 import argparse
 import glob
 import json
@@ -53,7 +54,7 @@ def get_macros(specfile_path):
     macros = []
     # Only do this on RPM 4.19.90+ (4.19.9x were pre-releases of 4.20)
     if tuple(int(i) for i in rpm.__version_info__) < (4, 19, 90):
-        return
+        return macros
 
     print(f"Checking {specfile_path} for %patchN statements")
     try:
@@ -112,6 +113,7 @@ def _main():
 
     spec = get_specfile()
 
+    # pylint: disable=no-member
     tags = spec.tags(spec.parsed_sections.package).content
     arches = {}
     for name in ['exclusivearch', 'excludearch', 'buildarch']:
@@ -133,7 +135,7 @@ def _main():
     # Set the value to 'localhost' if you want to skip the corresponding
     # task (the tasks are modified so they do nothing on localhost).
     if not args.hermetic:
-        for key in architecture_decision.keys():
+        for key in architecture_decision:
             if key.startswith("deps-"):
                 print(f"non-hermetic build, disabling {key} task")
                 architecture_decision[key] = "localhost"
@@ -151,7 +153,7 @@ def _main():
         selected_architectures = [random.choice(build_arches)]
 
     # skip disabled architectures
-    for key in architecture_decision.keys():
+    for key in architecture_decision:
         found = False
         for arch_ok in selected_architectures:
             if key.endswith("-" + arch_ok):
@@ -163,7 +165,7 @@ def _main():
         architecture_decision[key] = "localhost"
 
     print(f"Writing into {args.results_file}")
-    with open(args.results_file, "w") as fd:
+    with open(args.results_file, "w", encoding="utf-8") as fd:
         json.dump(architecture_decision, fd)
     print(json.dumps(architecture_decision))
 
