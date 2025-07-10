@@ -18,9 +18,6 @@ def get_params():
     return args
 
 
-args = get_params()
-
-
 def merge_sboms(buildroot_sbom, syft_sbom, output_sbom):
     sbom_broot = json.load(open(buildroot_sbom))
     sbom_syft = json.load(open(syft_sbom))
@@ -49,5 +46,11 @@ def merge_sboms(buildroot_sbom, syft_sbom, output_sbom):
     json.dump(sbom_broot, open(output_sbom, 'wt'))
 
 
-merge_sboms(args.sbom_spdx, args.syft_sbom, args.sbom_merged)
-print(f"{args.sbom_spdx} and {args.syft_sbom} to  {args.sbom_merged}")
+def _main():
+    args = get_params()
+    merge_sboms(args.sbom_spdx, args.syft_sbom, args.sbom_merged)
+    print(f"{args.sbom_spdx} and {args.syft_sbom} to  {args.sbom_merged}")
+
+
+if __name__ == "__main__":
+    _main()
