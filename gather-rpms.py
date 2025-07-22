@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 
 import koji
 
-INSTALLED_PKGS_LOG = "installed_pkgs.log"
+
 STAGING_DIR = "oras-staging"
 CG_IMPORT_JSON = "cg_import.json"
 SBOM_JSON = "sbom-spdx.json"
@@ -27,20 +27,6 @@ logs = []
 buildroots = {}
 
 current_time = datetime.datetime.now()
-
-def parse_NEVRA(nevra):
-    try:
-        nevra = koji.parse_NVRA(nevra)
-    except koji.GenericError:
-        # e.g. gpg-pubkey package
-        nevra = koji.parse_NVR(nevra)
-        nevra['arch'] = None
-    nevra['epoch'] = None
-    if ':' in nevra['version']:
-        epoch, version = nevra['version'].split(':')
-        nevra['epoch'] = int(epoch)
-        nevra['version'] = version
-    return nevra
 
 
 def symlink(src, arch, prepend_arch=False):
@@ -109,27 +95,6 @@ def handle_archdir(arch):
             }
         },
     }
-
-    installed_pkgs_log = os.path.join(arch, INSTALLED_PKGS_LOG)
-    if os.path.exists(installed_pkgs_log):
-        with open(installed_pkgs_log, "rt") as pkgs:
-            for line in pkgs.readlines():
-                nvr, btime, size, sigmd5, _ = line.strip().split()
-                nevra = parse_NEVRA(nvr)
-                if sigmd5 == '(none)':
-                    sigmd5 = None
-                buildroots[arch]['components'].append({
-                    'name': nevra['name'],
-                    'version': nevra['version'],
-                    'release': nevra['release'],
-                    'arch': nevra['arch'],
-                    'epoch': nevra['epoch'],
-                    'sigmd5': sigmd5,
-                    # TODO: it is not published by mock
-                    # OTOH, while we're getting it from brew, it is always unsigned
-                    'signature': None,
-                    'type': 'rpm',
-                })
 
 
 def prepare_arch_data():
@@ -371,6 +336,12 @@ def create_sbom():
         lockfile = json.load(open(lockfile_path, "rt"))
         buildroot = lockfile['buildroot']
         for rpm in buildroot['rpms']:
+            component = {k: v for k, v in rpm.items()
+                         if k in ['name', 'version', 'release', 'arch', 'epoch',
+                                  'sigmd5', 'signature']}
+            component["type"] = "rpm"
+            buildroots[arch]['components'].append(component)
+
             spdxid = f"SPDXRef-{rpm['arch']}-{rpm['name']}"
             pkg = {
                 "SPDXID": spdxid,
