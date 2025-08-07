@@ -7,7 +7,8 @@ ADD rpmdiff.patch /rpmdiff.patch
 ADD rpmautospec-norpm.patch /
 
 RUN \
-    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec && \
+    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile \
+      redhat-rpm-config acl rpmdevtools rpmautospec && \
     patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
@@ -19,9 +20,10 @@ ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/pulp_upload.py /usr/bin
 ADD python_scripts/pulp_client.py /usr/bin
 ADD python_scripts/pulp_transfer.py /usr/bin
+ADD python_scripts/pulp-upload.py /usr/bin
+ADD gen-ancestors-from-src.py /usr/bin
 
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
