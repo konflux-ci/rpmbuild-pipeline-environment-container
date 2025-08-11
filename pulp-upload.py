@@ -7,17 +7,20 @@ RPM repositories, file repositories, and content uploads with OAuth2 authenticat
 """
 
 import argparse
-import concurrent.futures
 import glob
+import hashlib
 import json
 import logging
 import os
 import sys
 import time
 import tomllib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+
+
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Generator
 from urllib.parse import urlencode
 
 import requests
@@ -29,7 +32,7 @@ from urllib3.util import Retry
 DEFAULT_TIMEOUT = 60
 DEFAULT_CONFIG_PATH = "~/.config/pulp/cli.toml"
 DEFAULT_OUTPUT_JSON = "pulp_results.json"
-DEFAULT_MAX_WORKERS = 3
+DEFAULT_MAX_WORKERS = 4
 DEFAULT_TASK_TIMEOUT = 86400
 TASK_SLEEP_INTERVAL = 5
 SUPPORTED_ARCHITECTURES = ["x86_64", "aarch64", "s390x", "ppc64le"]
@@ -37,6 +40,8 @@ SUPPORTED_ARCHITECTURES = ["x86_64", "aarch64", "s390x", "ppc64le"]
 # HTTP status codes to retry on
 RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
+# Batch size for checking RPMs on Pulp
+BATCH_SIZE = 50
 
 class OAuth2ClientCredentialsAuth(requests.auth.AuthBase):
     """
@@ -402,6 +407,14 @@ class PulpClient:
         url = self._url(f"api/v3/artifacts/?pulp_href__in={hrefs_string}")
         return self.session.get(url, timeout=self.timeout, **self.request_params)
 
+    def get_rpm_by_pkgIDs(self, pkg_ids: List[str]) -> Response:
+        """Get RPMs by package IDs."""
+        url = self.url(f"api/v3/content/rpm/packages/")
+        params = {
+            "pkgId__in": ",".join(pkg_ids)
+        }
+        return self.session.get(url, timeout=self.timeout, params=params, **self.request_params)
+
 
 def check_response(response: Response, operation: str = "request") -> None:
     """Check if a response is successful, exit if not."""
@@ -438,7 +451,139 @@ def upload_log(client: PulpClient, file_repository_prn: str, log_path: str,
     client.wait_for_finished_task(content_upload_response.json()['task'])
 
 
-def upload_rpms_logs(rpm_path: str, args: argparse.Namespace, client: PulpClient, arch: str,
+def _create_batches(items: List[str], batch_size: int = 100) -> Generator[List[str], None, None]:
+    """
+    Split a list into batches of specified size using a generator.
+    """
+    for i in range(0, len(items), batch_size):
+        yield items[i:i + batch_size]
+
+
+def _calculate_sha256_checksum(file_path: str) -> str:
+    """
+    Calculate SHA256 checksum of a file.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    sha256_hash = hashlib.sha256()
+
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(chunk)
+    except IOError as e:
+        raise IOError(f"Error reading file {file_path}: {e}")
+
+    return sha256_hash.hexdigest()
+
+
+def _process_single_batch(
+    client: PulpClient,
+    batch: List[str],
+    batch_num: int,
+    total_batches: int,
+) -> Optional[Dict]:
+    """
+    Process a single batch to find RPM files on Pulp.
+    """
+    logging.info(f"Processing batch {batch_num}/{total_batches} with {len(batch)} files")
+
+    # Calculate checksums for the current batch
+    checksums = []
+    for rpm_file in batch:
+        try:
+            checksum = _calculate_sha256_checksum(rpm_file)
+            checksums.append(checksum)
+            logging.debug(f"Calculated checksum for {os.path.basename(rpm_file)}: {checksum}")
+        except Exception as e:
+            logging.error(f"Failed to calculate checksum for {rpm_file}: {e}")
+            continue
+
+    # Lookup RPMs on Pulp
+    try:
+        response = client.get_rpm_by_pkgIDs(checksums)
+        check_response(response)
+        response_data = response.json()
+
+        # Extract found checksums from the API response
+        found_checksums = set()
+        if response_data.get('results'):
+            found_checksums = {result.get('pkgId') for result in response_data['results'] if result.get('pkgId')}
+
+        # Find checksums that were NOT found in the response
+        unfound_checksums = set(checksums) - found_checksums
+
+        # Find files corresponding to unfound checksums
+        unfound_rpms = []
+        for i, checksum in enumerate(checksums):
+            if checksum in unfound_checksums:
+                logging.debug(f"Unfound rpm: {batch[i]}")
+                unfound_rpms.append(batch[i])
+
+        # Only return result if there are unfound items
+        if unfound_checksums:
+            logging.info(f"Batch {batch_num}: {len(batch)} rpms completed. Found {len(found_checksums)} rpms, {len(unfound_checksums)} not found")
+            return {
+                "batch_number": batch_num,
+                "unfound_files": unfound_rpms,
+                "unfound_checksums": unfound_checksums,
+            }
+        else:
+            logging.info(f"Batch {batch_num} completed. All {len(checksums)} rpms found")
+            return None
+
+    except Exception as e:
+        logging.error(f"Request failed for batch {batch_num}: {e}")
+        return {
+            "batch_number": batch_num,
+            "unfound_files": batch,  # All files are considered unfound due to error
+            "unfound_checksums": checksums,
+            "error": str(e)
+        }
+
+
+def check_rpms_on_pulp(client: PulpClient, rpms: List[str]) -> List[str]:
+    """Check if RPMs are already on Pulp."""
+    # Create batches and convert generator to list to get total count
+    batches = list(_create_batches(rpms, BATCH_SIZE))
+    logging.info(f"Created {len(batches)} batches with {len(rpms)} rpms for lookup in Pulp")
+
+    unfound_rpms = []
+
+    # Use ThreadPoolExecutor for parallel batch processing
+    with ThreadPoolExecutor(thread_name_prefix="check_rpms_on_pulp", max_workers=DEFAULT_MAX_WORKERS) as executor:
+        # Submit all batches for processing
+        future_to_batch = {
+            executor.submit(
+                _process_single_batch,
+                client,
+                batch,
+                batch_num,
+                len(batches),
+            ): batch_num
+            for batch_num, batch in enumerate(batches, 1)
+        }
+
+        logging.info(f"Submitted {len(future_to_batch)} batches with {DEFAULT_MAX_WORKERS} workers")
+
+        # Collect results as they complete
+        for future in as_completed(future_to_batch):
+            batch_num = future_to_batch[future]
+            try:
+                result = future.result()
+                if result is not None:  # Only add batches with unfound files
+                    unfound_rpms.extend(result["unfound_files"])
+            except Exception as e:
+                logging.error(f"Batch {batch_num} processing failed with exception: {e}")
+                # Add all files to the list of unfound files
+                unfound_rpms.extend(batches[batch_num - 1])
+
+    logging.info(f"Lookup completed. {len(unfound_rpms)} unfound rpms")
+
+    return unfound_rpms
+
+def upload_rpms_logs(rpm_path: str, args: argparse.Namespace, client: PulpClient, arch: str, 
                      rpm_repository_href: str, file_repository_prn: str, date: str) -> None:
     """Upload RPMs and logs for a specific architecture."""
     rpms = glob.glob(os.path.join(rpm_path, "*.rpm"))
@@ -450,26 +595,23 @@ def upload_rpms_logs(rpm_path: str, args: argparse.Namespace, client: PulpClient
 
     labels = create_labels(args.build_id, arch, args.namespace, args.parent_package, date)
 
-    # Upload RPMs in parallel
-    rpm_results_artifacts = []
-    if rpms:
-        logging.info("Uploading %s RPM files for %s", len(rpms), arch)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_MAX_WORKERS) as executor:
-            futures = [executor.submit(create_rpm_content, client, rpm, labels) for rpm in rpms]
-            rpm_results_artifacts = [future.result() for future in concurrent.futures.as_completed(futures)]
+    # Check if RPMs are already on Pulp
+    rpms_to_upload = check_rpms_on_pulp(client, rpms)
+    
+    # Upload RPMs in parallel that were not found on Pulp
+    with ThreadPoolExecutor(thread_name_prefix="upload_rpms", max_workers=DEFAULT_MAX_WORKERS) as executor:
+        futures = [executor.submit(create_rpm_content, client, rpm, labels) for rpm in rpms_to_upload]
+        rpm_results_artifacts = [future.result() for future in as_completed(futures)]
 
-    # Upload logs sequentially
-    if logs:
-        logging.info("Uploading %s log files for %s", len(logs), arch)
-        for log in logs:
-            upload_log(client, file_repository_prn, log, args.build_id, labels)
-
-    # Add RPM content to repository
+    # Add uploaded RPMs to the repository
     if rpm_results_artifacts:
         logging.info("Adding %s RPM artifacts to repository", len(rpm_results_artifacts))
         rpm_repo_results = client.add_content(rpm_repository_href, rpm_results_artifacts)
         client.wait_for_finished_task(rpm_repo_results.json()['task'])
 
+    # Upload logs sequentially
+    for log in logs:
+        upload_log(client, file_repository_prn, log, args.build_id, labels)
 
 def create_or_get_repository(client: PulpClient, repository_name: str, repo_type: str) -> Tuple[str, Optional[str]]:
     """
