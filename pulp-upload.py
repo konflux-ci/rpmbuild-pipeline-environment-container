@@ -43,6 +43,9 @@ RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 # Batch size for checking RPMs on Pulp
 BATCH_SIZE = 50
 
+# Chunk size for get_file_locations() GET requests
+GET_FILE_LOC_CHUNK_SIZE = 20
+
 class OAuth2ClientCredentialsAuth(requests.auth.AuthBase):
     """
     OAuth2 Client Credentials Grant authentication flow implementation.
@@ -196,6 +199,76 @@ class PulpClient:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         return session
+
+    def _chunked_get(self, url: str, params: Optional[Dict[str, Any]] = None,
+                     chunk_param: Optional[str] = None, chunk_size: int = 50, **kwargs) -> Response:
+        # Perform a GET request with chunking for large parameter lists.
+        #
+        # This is a workaround for the fact that requests with large parameter
+        # values using "GET" method fails with "Request Line is too large".
+        # Hence, this splits the parameter value into chunks of the given size,
+        # and makes a separate request for each chunk. The results are aggregated
+        # into a single response.
+        #
+        # Note: - chunks are created on only one parameter at a time.
+        #       - response object of the last chunk is returned with the aggregated results.
+
+        if not params or not chunk_param or chunk_param not in params:
+            # No chunking needed, make regular request
+            return self.session.get(url, params=params, **kwargs)
+
+        # Extract the parameter value and check if it needs chunking
+        param_value = params[chunk_param]
+        if not isinstance(param_value, str) or ',' not in param_value:
+            # Not a comma-separated list, make regular request
+            return self.session.get(url, params=params, **kwargs)
+
+        values = [v.strip() for v in param_value.split(',')]
+
+        if len(values) <= chunk_size:
+            # Small list, make regular request
+            return self.session.get(url, params=params, **kwargs)
+
+        # Need to chunk the request
+        logging.debug(f"Chunking parameter '{chunk_param}' with {len(values)} values for request {url}")
+
+        all_results = []
+        chunks = [values[i:i + chunk_size] for i in range(0, len(values), chunk_size)]
+        last_response = None
+
+        for i, chunk in enumerate(chunks, 1):
+            logging.debug(f"Processing chunk {i}/{len(chunks)} with {len(chunk)} values")
+
+            # Create params for this chunk
+            chunk_params = params.copy()
+            chunk_params[chunk_param] = ','.join(chunk)
+
+            try:
+                response = self.session.get(url, params=chunk_params, **kwargs)
+                check_response(response, f"chunked request {i}")
+                last_response = response
+
+                # Parse and aggregate results
+                chunk_data = response.json()
+                if chunk_data.get('results'):
+                    all_results.extend(chunk_data['results'])
+
+            except Exception as e:
+                logging.error(f"Failed to process chunk {i}: {e}")
+                raise
+
+        # Create aggregated response
+        if last_response:
+            aggregated_data = {
+                "count": len(all_results),
+                "results": all_results
+            }
+
+            last_response._content = json.dumps(aggregated_data).encode('utf-8')
+            return last_response
+
+        # Fallback: return empty response
+        return self.session.get(url, params={chunk_param: ""}, **kwargs)
 
     @classmethod
     def create_from_config_file(cls, path: Optional[str] = None, domain: Optional[str] = None,
@@ -403,17 +476,22 @@ class PulpClient:
     def get_file_locations(self, artifacts: List[Dict[str, str]]) -> Response:
         """Get file locations for artifacts."""
         hrefs = [list(artifact.values())[0] for artifact in artifacts]
-        hrefs_string = ','.join(hrefs)
-        url = self._url(f"api/v3/artifacts/?pulp_href__in={hrefs_string}")
-        return self.session.get(url, timeout=self.timeout, **self.request_params)
+        url = self._url(f"api/v3/artifacts/")
+        params = {
+            "pulp_href__in": ','.join(hrefs)
+        }
+        return self._chunked_get(url, params=params, chunk_param="pulp_href__in",
+                                timeout=self.timeout, chunk_size=GET_FILE_LOC_CHUNK_SIZE,
+                                **self.request_params)
 
     def get_rpm_by_pkgIDs(self, pkg_ids: List[str]) -> Response:
         """Get RPMs by package IDs."""
-        url = self.url(f"api/v3/content/rpm/packages/")
+        url = self._url(f"api/v3/content/rpm/packages/")
         params = {
             "pkgId__in": ",".join(pkg_ids)
         }
-        return self.session.get(url, timeout=self.timeout, params=params, **self.request_params)
+        return self._chunked_get(url, params=params, chunk_param="pkgId__in",
+                                timeout=self.timeout, **self.request_params)
 
 
 def check_response(response: Response, operation: str = "request") -> None:
