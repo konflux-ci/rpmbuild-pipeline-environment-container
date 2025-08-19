@@ -1,4 +1,16 @@
 #!/usr/bin/python3
+"""Generate ancestors data for SBOM from source code.
+
+This script analyzes RPM source and generates required ancestors data for
+Software Bill of Materials (SBOM) generation by following:
+
+- guide: https://redhatproductsecurity.github.io/security-data-guidelines/sbom/#rpm
+- examples: https://github.com/RedHatProductSecurity/security-data-guidelines/tree/main/sbom/examples/rpm/build
+
+Example usage:
+    ./gen-ancestors-from-src.py -s /path/to/source/dir -o ancestors.json
+
+"""
 from argparse import ArgumentParser
 import hashlib
 import json
@@ -8,7 +20,7 @@ import re
 import subprocess
 import sys
 
-UPSTREAM_URL_SCHEMAS = ("http://", "https://", "ftp://")
+UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
 RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]
 SOURCE_RE = re.compile(r"^(source(\d+))\s*:\s*((.*/)?(.*))(\d+#.*)?$", re.IGNORECASE)
 ARCHIVE_EXTENSIONS = (
@@ -47,7 +59,7 @@ def run_command(cmd, capture_output=True, check=True, cwd=None):
     :returns: Completed process object
     :rtype: subprocess.CompletedProcess
     """
-    logging.debug(f"Running command: {cmd}")
+    logging.debug("Running command: %s", cmd)
     result = subprocess.run(
         cmd,
         shell=isinstance(cmd, str),
@@ -58,9 +70,9 @@ def run_command(cmd, capture_output=True, check=True, cwd=None):
         encoding="utf-8",
     )
     if result.stdout:
-        logging.debug(f"Command stdout: {result.stdout}")
+        logging.debug("Command stdout: %s", result.stdout)
     if result.stderr:
-        logging.debug(f"Command stderr: {result.stderr}")
+        logging.debug("Command stderr: %s", result.stderr)
     result.check_returncode()
     return result
 
@@ -160,14 +172,14 @@ def list_sources(specfile, srcdir="."):
         (source, idx, loc, _, sfn, _) = m.groups()
 
         # no need to check if it's a full URL since it is quite simple
-        if loc and loc.startswith(UPSTREAM_URL_SCHEMAS):
+        if loc and loc.startswith(UPSTREAM_URL_SCHEMES):
             url = loc
         else:
             url = None
             # TODO: maybe only accept HTTP(S)?
             logging.info(
-                f"{source}: not an accepted url. Expecting {UPSTREAM_URL_SCHEMAS},"
-                f" but got {loc}. skipped"
+                "%s: not an accepted url. Expecting %s, but got %s. skipped",
+                source, UPSTREAM_URL_SCHEMES, loc
             )
 
         sname, sver = parse_name_version(sfn)
@@ -217,7 +229,7 @@ def main():
         raise ValueError(f"Source directory {src_dir} does not exist or is not a directory")
     logging.info("Working on sourcedir: %s", src_dir)
     specfile = search_specfile(src_dir)
-    logging.info(f"Specfile found: {specfile}")
+    logging.info("Specfile found: %s", specfile)
     sources_file = os.path.join(src_dir, "sources")
     if not os.path.isfile(sources_file):
         raise FileNotFoundError(f"Sources file not found in {src_dir}")
