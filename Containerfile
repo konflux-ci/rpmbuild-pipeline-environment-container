@@ -4,10 +4,12 @@ FROM registry.fedoraproject.org/fedora:42@sha256:cb4ad05c633c2b17b0f819badddae3e
 VOLUME /var/lib/containers
 
 ADD rpmdiff.patch /rpmdiff.patch
+ADD mock-6.3-lockfile-repoquery.patch /
 
 RUN \
     dnf -y install mock koji dist-git-client patch python3-specfile redhat-rpm-config acl && \
     patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
+    patch /usr/lib/python3.13/site-packages/mockbuild/plugins/buildroot_lock.py < mock-6.3-lockfile-repoquery.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
     useradd mockbuilder && \

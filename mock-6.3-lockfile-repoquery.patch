@@ -1,0 +1,27 @@
+commit 7f87d3eacde54a51280bca23fd469d5b67b28030 (HEAD -> praiskup-elevate-lock, praiskup/praiskup-elevate-lock)
+Author:     Pavel Raiskup <praiskup@redhat.com>
+AuthorDate: Mon Aug 18 23:54:08 2025 +0200
+Commit:     Pavel Raiskup <praiskup@redhat.com>
+CommitDate: Mon Aug 18 23:54:08 2025 +0200
+
+    buildroot_lock: call repoquery as a privileged user
+
+diff --git a/mock/py/mockbuild/plugins/buildroot_lock.py b/mock/py/mockbuild/plugins/buildroot_lock.py
+index 06bb98b5..cf0e1ded 100644
+--- a/mock/py/mockbuild/plugins/buildroot_lock.py
++++ b/mock/py/mockbuild/plugins/buildroot_lock.py
+@@ -52,9 +52,11 @@ class BuildrootLockfile:
+                                 "epoch", "sigmd5", "signature"]
+ 
+                 def _executor(cmd):
+-                    out, _ = self.buildroot.doOutChroot(cmd, returnOutput=True,
+-                                                        returnStderr=False)
+-                    return out
++                    with self.buildroot.uid_manager.elevated_privileges():
++                        out, _ = self.buildroot.doOutChroot(cmd,
++                                                            returnOutput=True,
++                                                            returnStderr=False)
++                        return out
+ 
+                 packages = query_packages(query_fields, chrootpath, _executor)
+                 query_packages_location(packages, chrootpath, _executor,
