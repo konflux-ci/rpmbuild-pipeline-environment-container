@@ -1,0 +1,8 @@
+apiVersion: pipelinesascode.tekton.dev/v1alpha1
+kind: Repository
+metadata:
+  name: rpmbuild-pipeline-environment-container
+  namespace: rpm-build-pipeline-tenant
+spec:
+  concurrency_limit: 1
+url: https://github.com/konflux-ci/rpmbuild-pipeline-environment-container
