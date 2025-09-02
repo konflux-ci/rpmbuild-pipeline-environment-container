@@ -117,8 +117,8 @@ def _main():
     if args.results_file:
         output_file = args.results_file
 
-    selected_architectures = args.selected_architectures
-    print(f"Trying to build for {selected_architectures}")
+    allowed_architectures = set(args.selected_architectures)
+    print(f"Trying to build for {allowed_architectures}")
 
     spec = get_specfile(args.workdir)
 
@@ -148,18 +148,21 @@ def _main():
             if key.startswith("deps-"):
                 print(f"non-hermetic build, disabling {key} task")
                 architecture_decision[key] = "localhost"
-    if arches == ['noarch']:
-        # when exclusivearch
-        if arches['exclusivearch']:
-            build_arches = arches['exclusivearch']
-            # remove excludeArches
-            build_arches = list(set(build_arches) - set(arches['excludearch']))
-        else:
-            # default build arches
-            build_arches = ['x86_64', 'i686', 'aarch64', 's390x', 'ppc64le']
-            # build arches without excludeArch
-            build_arches = list(set(build_arches) - set(arches['excludearch']))
-        selected_architectures = [random.choice(build_arches)]
+
+
+    build_architectures = allowed_architectures
+    if arches['exclusivearch']:
+        build_architectures &= set(arches["exclusivearch"])
+    if arches['excludearch']:
+        build_architectures -= arches["excludearch"]
+    if arches['buildarch'] == ['noarch']:
+        selected_architectures = [random.choice(list(build_architectures))]
+    else:
+        # this case we catch other buildArch values instead of noarch, for example buildArch: x86_64.
+        # Value buildArch should be noarch only or specfile should be without buildArch,
+        # but we allow build on all build architectures or list of build architectures
+        # as result of buildExclusive and buildExclude when buildArch is something else than noarch.
+        selected_architectures = build_architectures
 
     # skip disabled architectures
     for key in architecture_decision:
