@@ -1,0 +1,30 @@
+---
+name: Unit-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  run-python-unit-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: install needed RPMs
+        run: dnf install -y python3-rpm python3-pip python3-specfile
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+
+      - name: Install test dependencies
+        run: pip install -r test_requirements.txt
+
+      - name: Run unit tests
+        run: ./run_tests.sh
