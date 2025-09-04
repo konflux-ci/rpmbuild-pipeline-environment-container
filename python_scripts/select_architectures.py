@@ -35,8 +35,8 @@ def get_arches(name, tags):
     unknown = " ".join([x for x in values if x.startswith("%")])
     if unknown:
         print(f"Unknown macros in {name_map[name]}: {unknown}")
-        return []
-    return values
+        return set()
+    return set(values)
 
 
 def get_macros(specfile_path):
@@ -152,10 +152,10 @@ def _main():
 
     build_architectures = allowed_architectures
     if arches['exclusivearch']:
-        build_architectures &= set(arches["exclusivearch"])
+        build_architectures &= arches["exclusivearch"]
     if arches['excludearch']:
         build_architectures -= arches["excludearch"]
-    if arches['buildarch'] == ['noarch']:
+    if arches['buildarch'] == set(['noarch']):
         selected_architectures = [random.choice(list(build_architectures))]
     else:
         # this case we catch other buildArch values instead of noarch, for example buildArch: x86_64.
