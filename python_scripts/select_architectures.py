@@ -152,11 +152,15 @@ def _main():
 
     build_architectures = allowed_architectures
     if arches['exclusivearch']:
+        print(f"Limit to ExclusiveArch: {arches["exclusivearch"]}")
         build_architectures &= arches["exclusivearch"]
     if arches['excludearch']:
+        print(f"Avoid ExcludeArch: {arches["excludearch"]}")
         build_architectures -= arches["excludearch"]
     if arches['buildarch'] == set(['noarch']):
         selected_architectures = [random.choice(list(build_architectures))]
+        print(f"We've randomly selected {selected_architectures[0]} from "
+              f"{build_architectures}")
     else:
         # this case we catch other buildArch values instead of noarch, for example buildArch: x86_64.
         # Value buildArch should be noarch only or specfile should be without buildArch,
