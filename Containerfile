@@ -5,16 +5,19 @@ VOLUME /var/lib/containers
 
 ADD rpmdiff.patch /rpmdiff.patch
 ADD mock-6.3-lockfile-repoquery.patch /
+ADD rpmautospec-norpm.patch /
 
 RUN \
-    dnf -y install mock koji dist-git-client patch python3-specfile redhat-rpm-config acl && \
+    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec && \
     patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.13/site-packages/mockbuild/plugins/buildroot_lock.py < mock-6.3-lockfile-repoquery.patch && \
+    patch /usr/lib/python3.13/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
 
+ADD specparser.py /usr/lib/python3.13/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD gather-rpms.py /usr/bin
