@@ -7,7 +7,7 @@ import os
 import random
 import re
 import rpm
-from specfile import Specfile
+from specfile import Specfile, exceptions
 
 WORKDIR = '/var/workdir/source'
 
@@ -91,6 +91,8 @@ def get_specfile(workdir=WORKDIR):
         spec = Specfile(specfile_path[0], macros=macros)
     except TypeError as ex:
         raise RuntimeError("No .spec file") from ex
+    except exceptions.RPMException as ex:
+        raise RuntimeError("No .spec file") from ex
     except OSError as ex:
         raise RuntimeError(ex) from ex
 
@@ -148,7 +150,6 @@ def _main():
             if key.startswith("deps-"):
                 print(f"non-hermetic build, disabling {key} task")
                 architecture_decision[key] = "localhost"
-
 
     build_architectures = allowed_architectures
     if arches['exclusivearch']:
