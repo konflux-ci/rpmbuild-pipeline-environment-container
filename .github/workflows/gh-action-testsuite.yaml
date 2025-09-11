@@ -18,7 +18,10 @@ jobs:
         uses: actions/checkout@v3
 
       - name: install needed RPMs
-        run: dnf install -y python3-rpm python3-pip python3-specfile koji
+        run: dnf install -y python3-rpm python3-pip python3-specfile koji patch
+        
+      - name: patch rpmdiff
+        run: patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < rpmdiff.patch
 
       - name: Set up Python
         uses: actions/setup-python@v5
