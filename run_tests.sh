@@ -19,14 +19,26 @@ download_files()
     mkdir -p "$target"
     for file in "$@"; do
       base=$(basename "$file")
+      dirname=$(dirname "$file")
+      mkdir -p "$target/$dirname"
       # skip already downloaded files
       test -f "$target/$file" && continue
-    curl "${curl_options[@]}" "$cache_url/$file" --location -o "$target/$base"
+    curl "${curl_options[@]}" "$cache_url/$file" --location -o "$target/$dirname/$base"
     done
 }
 
 # Cache those files locally.
-download_files test-source-rpms pytest-rpms/python3-pytest-8.3.5-8.fc44.noarch.rpm pytest-rpms/pytest-8.3.5-8.fc44.src.rpm
+download_files test-source-rpms \
+                valid-noarch-subpackage/test-noarch-check-1-1.fc42.src.rpm \
+                valid-noarch-subpackage/aarch64/test-noarch-check-1-1.fc42.aarch64.rpm \
+                valid-noarch-subpackage/aarch64/test-noarch-check-noarch-1-1.fc42.noarch.rpm \
+                valid-noarch-subpackage/x86_64/test-noarch-check-1-1.fc42.x86_64.rpm\
+                valid-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm \
+                broken-noarch-subpackage/test-noarch-check-1-1.fc42.src.rpm \
+                broken-noarch-subpackage/aarch64/test-noarch-check-1-1.fc42.aarch64.rpm \
+                broken-noarch-subpackage/aarch64/test-noarch-check-noarch-1-1.fc42.noarch.rpm \
+                broken-noarch-subpackage/x86_64/test-noarch-check-1-1.fc42.x86_64.rpm \
+                broken-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm
 
 coverage=( --cov-report term-missing --cov python_scripts )
 for arg; do
