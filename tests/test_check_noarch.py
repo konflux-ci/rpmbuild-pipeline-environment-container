@@ -31,7 +31,7 @@ class TestCheckNoarch(unittest.TestCase):
         """
         result_dir = os.path.realpath(__file__)
         dirname = os.path.dirname(result_dir).removesuffix('tests')
-        path_test_source = os.path.join(os.path.dirname(dirname), 'test-source-rpms')
+        path_test_source = os.path.join(os.path.dirname(dirname), 'test-source-rpms', 'pytest-rpms')
         sys.argv = ["this", "--results-dir", path_test_source]
         check_noarch()
         actual = self.capsys.readouterr()
