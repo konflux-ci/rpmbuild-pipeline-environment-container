@@ -26,7 +26,7 @@ download_files()
 }
 
 # Cache those files locally.
-download_files test-source-rpms python3-pytest-8.3.5-8.fc44.noarch.rpm pytest-8.3.5-8.fc44.src.rpm
+download_files test-source-rpms pytest-rpms/python3-pytest-8.3.5-8.fc44.noarch.rpm pytest-rpms/pytest-8.3.5-8.fc44.src.rpm
 
 coverage=( --cov-report term-missing --cov python_scripts )
 for arg; do
