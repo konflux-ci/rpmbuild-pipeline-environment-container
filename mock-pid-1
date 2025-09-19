@@ -1,0 +1,6 @@
+#! /bin/sh
+
+# Execute Mock as a child of /bin/sh to ensure any zombie processes get reaped,
+# which is easier than shell-escaping every mock call with bash -c "command".
+
+mock "$@"

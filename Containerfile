@@ -19,6 +19,7 @@ ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD gather-rpms.py /usr/bin
 ADD pulp-upload.py /usr/bin
+ADD mock-pid-1 /usr/bin
 
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
