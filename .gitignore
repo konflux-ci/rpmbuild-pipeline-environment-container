@@ -3,3 +3,4 @@ __pycache__
 tests/results.json
 test-source-rpms/
 trace
+tests/sbom_merged.json

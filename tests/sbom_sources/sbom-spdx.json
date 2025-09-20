@@ -1,0 +1,54 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "creationInfo": {
+    "created": "2025-09-20T21:50:00.325906",
+    "creators": [
+      "Tool: Konflux"
+    ]
+  },
+  "name": "test-pkg-1.1.1-1.el9",
+  "documentNamespace": "TODO",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-noarch-test-pkg",
+      "name": "test-pkg",
+      "versionInfo": "1.1.1-1.el9",
+      "supplier": "Organization: Red Hat",
+      "downloadLocation": "NOASSERTION",
+      "packageFileName": "test-pkg-1.1.1-1.el9.src.rpm",
+      "builtDate": "2025-09-23",
+      "licenseConcluded": "LGPL-2.1-only AND GPL-2.0-or-later",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:rpm/redhat/test-pkg@1.1.1-1.el9?arch=noarch"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "186deeb746c0802fae513f3429cc9f600b08702b1d188fd597c"
+        }
+      ]
+    }
+  ],
+  "files": [],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-SRPM"
+    },
+    {
+      "spdxElementId": "SPDXRef-noarch-test-pkg",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-SRPM"
+    }
+  ],
+  "documentDescribes": [
+    "SPDXRef-noarch-test-pkg"
+  ]
+}
