@@ -167,7 +167,7 @@ def create_md_file(options, extra_metadata=None):
             "original_url": options.source_url,
         },
         "typeinfo": {
-            "rpm": None,
+            "rpm": {},
         }
     }
 
