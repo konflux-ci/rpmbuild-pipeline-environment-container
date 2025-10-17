@@ -21,7 +21,9 @@ ADD specparser.py /usr/lib/python3.13/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/pulp-upload.py /usr/bin
+ADD python_scripts/pulp_upload.py /usr/bin
+ADD python_scripts/pulp_client.py /usr/bin
+ADD python_scripts/pulp_transfer.py /usr/bin
 
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
