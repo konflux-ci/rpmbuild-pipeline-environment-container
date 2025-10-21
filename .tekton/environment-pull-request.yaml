@@ -50,3 +50,19 @@ spec:
   - name: git-auth
     secret:
       secretName: '{{ git_auth_secret }}'
+
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: InternalRequest
+metadata:
+  name: environment-on-pull-request-internal-request
+spec:
+  pipelineRef:
+    resolver: git
+    params:
+      - name: url
+        value: "{{ source_url }}"
+      - name: revision
+        value: "{{ revision }}"
+      - name: pathInRepo
+        value: pipeline/build-rpm-package.yaml
