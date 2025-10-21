@@ -35,15 +35,19 @@ spec:
       - linux/arm64
       - linux/ppc64le
       - linux/s390x
+  - name: self-ref-url
+    value: "https://github.com/jlibrova/rpmbuild-pipeline-environment-container.git"
+  - name: self-ref-revision
+    value: "issue-24"
   pipelineRef:
     resolver: git
     params:
       - name: url
-        value: "https://github.com/konflux-ci/olm-operator-konflux-sample.git"
+        value: $(params.self-ref-url)
       - name: revision
-        value: main
+        value: $(params.self-ref-revision)
       - name: pathInRepo
-        value: .tekton/multi-arch-build-pipeline.yaml
+        value: .tekton/rpmbuild-pipeline-pull-master-pipeline.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-environment
   workspaces:
