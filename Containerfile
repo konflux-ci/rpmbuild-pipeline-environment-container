@@ -18,16 +18,15 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/gather-rpms.py /usr/bin
 ADD python_scripts/pulp_client.py /usr/bin
 ADD python_scripts/pulp_utils.py /usr/bin
 ADD python_scripts/pulp_transfer.py /usr/bin
 ADD python_scripts/pulp_upload.py /usr/bin
-ADD gen-ancestors-from-src.py /usr/bin
 
 ADD python_scripts/gather_rpms.py /usr/local/bin/gather_rpms.py
 RUN ln -s /usr/local/bin/gather_rpms.py /usr/bin/gather-rpms.py
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
+ADD python_scripts/gen-ancestors-from-src.py /usr/local/bin/gen-ancestors-from-src.py
 ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
 ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
 
