@@ -396,12 +396,14 @@ def create_sbom():
                 # TODO: - signature to annotation/comment?
             }
             if 'sigmd5' in rpm:
-                pkg["annotations"] = {
+                pkg["annotations"] = [
+                    {
                     "annotationType": "OTHER",
                     "annotator": "Tool: Konflux",
                     "annotationDate": current_time.isoformat(),
                     "comment": f"sigmd5: {rpm['sigmd5']}",
-                }
+                    },
+                ]
             sbom['packages'].append(pkg)
             for built_rpm in arch_rpms + [srpm]:
                 path = os.path.join(STAGING_DIR, built_rpm)
