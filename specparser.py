@@ -103,7 +103,10 @@ class NoRPMSpecParser(SpecParser):
         registry = copy.deepcopy(self.registry)
         hooks = NoRPMHooks()
         with open(specfilename, "r", encoding="utf8", errors="ignore") as fd:
-            specfile_expand(fd.read(), registry, hooks)
+            try:
+                specfile_expand(fd.read(), registry, hooks)
+            except Exception as err:
+                raise SpecParserError(f"parsing error: {err}") from err
         try:
             release = hooks.tags["release"]
             epoch_version = hooks.tags["version"]
