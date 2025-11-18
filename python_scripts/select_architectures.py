@@ -99,6 +99,37 @@ def get_specfile(workdir=WORKDIR):
     return spec
 
 
+def apply_platform_overrides(platform_labels, architecture_decision):
+    """
+    Parses the list of MPL strings (e.g., "linux-d320-m8xlarge/amd64") and overrides the default 'build-*'
+    keys in architecture_decision.
+    """
+    arch_map = {
+        "amd64": "x86_64",
+        "arm64": "aarch64",
+        "s390x": "s390x",
+        "ppc64le": "ppc64le",
+    }
+
+    for platform_string in platform_labels:
+        found_match = False
+
+        for mpl_arch, target_arch in arch_map.items():
+            if platform_string.endswith(mpl_arch):
+                found_match = True
+
+                build_key = f"build-{target_arch}"
+
+                if build_key in architecture_decision:
+                    print(f"Applying override for {build_key}: {platform_string}")
+                    architecture_decision[build_key] = platform_string
+                break
+
+        if not found_match:
+            print(
+                f"Warning: Unknown architecture suffix in override '{platform_string}'. Expected ending with one of "
+                f"{list(arch_map.keys())}.")
+
 def get_params():
     parser = argparse.ArgumentParser()
     parser.add_argument('selected_architectures', nargs='+', help="List of selected architectures")
@@ -108,6 +139,7 @@ def get_params():
     parser.add_argument("--workdir", default=WORKDIR,
                         help=("Working directory where we read/write files "
                               f"(default {WORKDIR})"))
+    parser.add_argument('--platform-labels', nargs='*', default=[], help="List of platform override MPLs")
     args = parser.parse_args()
     return args
 
@@ -142,6 +174,11 @@ def _main():
         "build-s390x": "linux/s390x",
         "build-ppc64le": "linux/ppc64le",
     }
+
+    # Apply Platform Overrides
+    if args.platform_labels:
+        print(f"Found platform overrides: {args.platform_labels}")
+        apply_platform_overrides(args.platform_labels, architecture_decision)
 
     # Set the value to 'localhost' if you want to skip the corresponding
     # task (the tasks are modified so they do nothing on localhost).
