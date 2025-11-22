@@ -40,6 +40,9 @@ download_files test-source-rpms \
                 broken-noarch-subpackage/x86_64/test-noarch-check-1-1.fc42.x86_64.rpm \
                 broken-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm
 
+overrides=macro-overrides.json
+test -e "$overrides" || curl "${curl_options[@]}" https://raw.githubusercontent.com/praiskup/norpm-macro-overrides/refs/heads/main/distro-arch-specific.json --location -o "$overrides"
+
 coverage=( --cov-report term-missing --cov python_scripts )
 for arg; do
     case $arg in
