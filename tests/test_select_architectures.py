@@ -46,7 +46,9 @@ class TestSelectArchitectures(TestCase):
     def _run_selected_architectures(self, specfile, additional_args=None):
         self._testdir(specfile)
         results = os.path.join(self.testdir, "results.json")
+        overrides = os.path.join(self.testdir, "..", "macro-overrides.json")
         sys.argv = ["this", "--workdir", self.workdir,
+                    "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
         if additional_args:
             sys.argv += additional_args
@@ -349,7 +351,9 @@ class TestSelectArchitectures(TestCase):
         """
         self._testdir("dummy-pkg-unknown-macros.spec")
         results = os.path.join(self.testdir, "results.json")
+        overrides = os.path.join(self.testdir, "..", "macro-overrides.json")
         sys.argv = ["this", "--workdir", self.workdir,
+                    "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
         result = select_architectures()
         actual = self.capsys.readouterr()
@@ -357,24 +361,42 @@ class TestSelectArchitectures(TestCase):
         self.assertIn(expected, actual.out)
         self.assertEqual(result, None)
 
-    def test_patch_n(self):
+    def test_spec_syntax_error(self):
         """
-        Test when %patchN is in the specfile.
+        Norpm raises error.  We just ignore the error, and take the outcomes
+        from the part of specfile that was successfully parsed.
         """
-        self._run_selected_architectures("dummy-pkg-patch-n.spec",
-                                         ["--hermetic"])
-        actual = self.capsys.readouterr()
-        expected = "Defining '%patch0 %dnl' macro"
-        self.assertIn(expected, actual.out)
+        results = self._run_selected_architectures("syntax-error.spec",
+                                                   ["--hermetic"])
+        assert results == {
+            "build-aarch64": "linux/arm64",
+            "build-i686": "localhost",
+            "build-ppc64le": "localhost",
+            "build-s390x": "localhost",
+            "build-x86_64": "localhost",
+            "deps-aarch64": "linux/arm64",
+            "deps-i686": "localhost",
+            "deps-ppc64le": "localhost",
+            "deps-s390x": "localhost",
+            "deps-x86_64": "localhost",
+        }
 
-    def test_not_specfile(self):
+
+    def test_macro_overrides(self):
         """
-        Test when specfile is not specfile type.
+        Check that %rhel is defined if we override.  ROK-1036
         """
-        self._testdir("no_spec_file.spec")
-        results = os.path.join(self.testdir, "results.json")
-        sys.argv = ["this", "--workdir", self.workdir,
-                    "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
-            select_architectures()
-        self.assertEqual("No .spec file", str(re.exception))
+        results = self._run_selected_architectures("dummy-pkg-for-rhel.spec",
+                                                   ["--hermetic", "--target", "rhel-10"])
+        assert results == {
+            "build-aarch64": "linux/arm64",
+            "build-i686": "localhost",
+            "build-ppc64le": "localhost",
+            "build-s390x": "localhost",
+            "build-x86_64": "linux/amd64",
+            "deps-aarch64": "linux/arm64",
+            "deps-i686": "localhost",
+            "deps-ppc64le": "localhost",
+            "deps-s390x": "localhost",
+            "deps-x86_64": "linux/amd64",
+        }
