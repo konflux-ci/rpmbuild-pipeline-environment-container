@@ -7,6 +7,7 @@ ADD rpmdiff.patch /rpmdiff.patch
 ADD rpmautospec-norpm.patch /
 
 RUN \
+    dnf -y copr enable packit/praiskup-norpm-54 fedora-42-x86_64 && \
     dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec && \
     patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.13/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \

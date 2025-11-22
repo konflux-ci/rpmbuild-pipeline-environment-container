@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: install needed RPMs
-        run: dnf install -y python3-norpm python3-pip python3-specfile koji patch
+        run: dnf -y copr enable packit/praiskup-norpm-54 fedora-42-x86_64 && dnf install -y python3-norpm python3-pip python3-specfile koji patch
 
       - name: patch rpmdiff
         run: patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < rpmdiff.patch
