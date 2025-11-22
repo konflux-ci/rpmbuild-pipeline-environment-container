@@ -4,3 +4,4 @@ tests/results.json
 test-source-rpms/
 trace
 tests/sbom_merged.json
+macro-overrides.json
