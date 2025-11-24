@@ -11,7 +11,7 @@ jobs:
   run-python-unit-tests:
     runs-on: ubuntu-latest
     container:
-      image: fedora:42
+      image: fedora:43
 
     steps:
       - name: Checkout code
@@ -21,7 +21,7 @@ jobs:
         run: dnf install -y python3-rpm python3-pip python3-specfile koji patch
         
       - name: patch rpmdiff
-        run: patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < rpmdiff.patch
+        run: patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < rpmdiff.patch
 
       - name: Set up Python
         uses: actions/setup-python@v5

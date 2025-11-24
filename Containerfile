@@ -1,4 +1,4 @@
-FROM registry.fedoraproject.org/fedora:42@sha256:7806757462a689946604f0daff85891925e15fa67720eae3c57e9258cdc672d9
+FROM registry.fedoraproject.org/fedora:43@sha256:ee44119d98cbc2ba92fcb22c510e4453f88c4759d17c11e4e26604987efb032a
 
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
@@ -8,14 +8,14 @@ ADD rpmautospec-norpm.patch /
 
 RUN \
     dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec && \
-    patch /usr/lib/python3.13/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
-    patch /usr/lib/python3.13/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
+    patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
+    patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
 
-ADD specparser.py /usr/lib/python3.13/site-packages/rpmautospec/
+ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/gather-rpms.py /usr/bin
