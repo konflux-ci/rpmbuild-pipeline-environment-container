@@ -1,0 +1,12 @@
+{
+  "deps-x86_64": "linux/amd64",
+  "deps-i686": "linux/amd64",
+  "deps-aarch64": "linux/arm64",
+  "deps-s390x": "linux/s390x",
+  "deps-ppc64le": "linux/ppc64le",
+  "build-x86_64": "linux/amd64",
+  "build-i686": "linux/amd64",
+  "build-aarch64": "linux/arm64",
+  "build-s390x": "linux/s390x",
+  "build-ppc64le": "linux/ppc64le"
+}
