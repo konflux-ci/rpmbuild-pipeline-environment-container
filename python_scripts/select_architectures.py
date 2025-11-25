@@ -10,6 +10,7 @@ import rpm
 from specfile import Specfile, exceptions
 
 WORKDIR = '/var/workdir/source'
+CONFIG_DIR = "/etc/konflux-rpmbuild-pipeline"
 
 
 def safe_attr(name, tags):
@@ -105,6 +106,8 @@ def get_params():
     parser.add_argument('--hermetic', action="store_true", default=False,
                         help="If existing, use hermetic build")
     parser.add_argument('--results-file', help="Path to result filename")
+    parser.add_argument('--platforms', help=f"Platform specifiers, as configured within {CONFIG_DIR}",
+                        default="normal")
     parser.add_argument("--workdir", default=WORKDIR,
                         help=("Working directory where we read/write files "
                               f"(default {WORKDIR})"))
@@ -130,18 +133,10 @@ def _main():
     for name in ['exclusivearch', 'excludearch', 'buildarch']:
         arches[name] = get_arches(name, tags)
 
-    architecture_decision = {
-        "deps-x86_64": "linux/amd64",
-        "deps-i686": "linux/amd64",
-        "deps-aarch64": "linux/arm64",
-        "deps-s390x": "linux/s390x",
-        "deps-ppc64le": "linux/ppc64le",
-        "build-x86_64": "linux/amd64",
-        "build-i686": "linux/amd64",
-        "build-aarch64": "linux/arm64",
-        "build-s390x": "linux/s390x",
-        "build-ppc64le": "linux/ppc64le",
-    }
+    # the pipeline can provide its own file
+    with open(os.path.join(CONFIG_DIR, f"mpc-platforms-{args.platforms}.json"),
+              "r", encoding="utf-8") as fd:
+        architecture_decision = json.load(fd)
 
     # Set the value to 'localhost' if you want to skip the corresponding
     # task (the tasks are modified so they do nothing on localhost).

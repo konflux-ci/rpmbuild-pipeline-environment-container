@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 from unittest import TestCase
+from unittest.mock import patch
 
 import pytest
 
@@ -26,11 +27,20 @@ class TestSelectArchitectures(TestCase):
     def setUp(self):
         self.maxDiff = None
         self.workdir = tempfile.mkdtemp()
-        self.testdir = ''
         self.capture = None
+        self.testdir = os.path.realpath(__file__)
+        self.testdir = os.path.dirname(self.testdir)
+        self.patchers = [
+            patch("python_scripts.select_architectures.CONFIG_DIR",
+                  os.path.join(self.testdir, ".."))
+        ]
+        for patcher in self.patchers:
+            patcher.start()
 
     def tearDown(self):
         shutil.rmtree(self.workdir)
+        for patcher in self.patchers:
+            patcher.stop()
 
     @pytest.fixture(autouse=True)
     def pytest_setup(self, capsys):
@@ -38,8 +48,6 @@ class TestSelectArchitectures(TestCase):
         self.capsys = capsys
 
     def _testdir(self, specfile):
-        self.testdir = os.path.realpath(__file__)
-        self.testdir = os.path.dirname(self.testdir)
         specfile = os.path.join(self.testdir, "specfiles", specfile)
         shutil.copy2(specfile, self.workdir)
 
