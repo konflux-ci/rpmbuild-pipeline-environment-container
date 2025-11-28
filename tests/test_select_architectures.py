@@ -378,3 +378,33 @@ class TestSelectArchitectures(TestCase):
         with self.assertRaises(RuntimeError) as re:
             select_architectures()
         self.assertEqual("No .spec file", str(re.exception))
+
+    def test_platform_override(self):
+        """
+        Test platform override via --platform-labels argument.
+        """
+        results = self._run_selected_architectures("dpdk.spec",["--hermetic", "--platform-labels",
+                                                                "linux-beefy/amd64", "linux-beefy/arm64"])
+        expected_results = {
+            "deps-x86_64": "linux/amd64",
+            "deps-aarch64": "linux/arm64",
+            "deps-i686": "localhost",
+            "deps-s390x": "localhost",
+            "deps-ppc64le": "linux/ppc64le",
+            "build-x86_64": "linux-beefy/amd64",
+            "build-aarch64": "linux-beefy/arm64",
+            "build-i686": "localhost",
+            "build-s390x": "localhost",
+            "build-ppc64le": "linux/ppc64le"
+        }
+
+        assert results == expected_results
+
+    def test_platform_override_invalid_format(self):
+        """
+        Test platform override with invalid format.
+        """
+        self._run_selected_architectures("dpdk.spec",
+                                         ["--hermetic", "--platform-labels", "invalid-format-string"])
+        captured = self.capsys.readouterr()
+        assert "Warning: Unknown architecture suffix" in captured.out
