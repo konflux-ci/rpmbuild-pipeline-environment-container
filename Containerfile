@@ -27,6 +27,9 @@ ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
 ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
 
+# TODO: We need to find a better place for this datafile (and autogenerate it)
+ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
+
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
 RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \
     /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
