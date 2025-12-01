@@ -5,21 +5,14 @@ import glob
 import json
 import os
 import random
-import re
-import rpm
-from specfile import Specfile, exceptions
+
+from norpm.macrofile import system_macro_registry
+from norpm.specfile import specfile_expand, ParserHooks
+from norpm.overrides import override_macro_registry
+from norpm.exceptions import NorpmError
+
 
 WORKDIR = '/var/workdir/source'
-
-
-def safe_attr(name, tags):
-    """
-    Return evaluated spec file attribute or empty string
-    """
-    try:
-        return getattr(tags, name).expanded_value
-    except AttributeError:
-        return ""
 
 
 def get_arches(name, tags):
@@ -31,7 +24,7 @@ def get_arches(name, tags):
         'excludearch': 'ExcludeArch',
         'buildarch': 'BuildArch',
     }
-    values = safe_attr(name, tags).split()
+    values = tags.get(name, set())
     unknown = " ".join([x for x in values if x.startswith("%")])
     if unknown:
         print(f"Unknown macros in {name_map[name]}: {unknown}")
@@ -39,44 +32,10 @@ def get_arches(name, tags):
     return set(values)
 
 
-def get_macros(specfile_path):
-    """
-    RPM 4.19 deprecated the %patchN macro. RPM 4.20 removed it completely.
-    The macro works on RHEL <= 10 but does not work on Fedora 41+.
-    We can no longer even parse RPM spec files with the %patchN macros.
-    When we build for old streams, we define the %patchN macros
-    manually to be a no-op. It wouldn't build, but we only need to
-    extract a few tags that are not affected by patches. Ideally we
-    would define %patchN as a parametric macro forwarding arguments to
-    %patch -P N, but specfile library doesn't accept that.
-    Since N can be any number including zero-prefixed numbers,
-    we regex-search the spec file for %patchN uses and define only the macros
-    found.
-    """
-    macros = []
-    # Only do this on RPM 4.19.90+ (4.19.9x were pre-releases of 4.20)
-    if tuple(int(i) for i in rpm.__version_info__) < (4, 19, 90):
-        return macros
-
-    print(f"Checking {specfile_path} for %patchN statements")
-    try:
-        with open(specfile_path, "rb") as specfile:
-            # Find all uses of %patchN in the spec files
-            # Using a benevolent regex: commented out macros, etc. match as
-            # well
-            for patch in re.findall(b"%{?patch(\\d+)\\b", specfile.read()):
-                # We operate on bytes because we don't know the spec encoding
-                # but the matched part only includes ASCII digits
-                patch = f"patch{patch.decode('ascii')}"
-                print(f"Defining '%{patch} %dnl' macro")
-                macros.append((patch, "%dnl"))
-    except OSError:
-        pass
-
-    return macros
-
-
 def get_specfile(workdir=WORKDIR):
+    """
+    Find & return the specfile path in given WORKDIR.
+    """
     specfile_path = glob.glob(os.path.join(workdir, '*.spec'))
 
     if len(specfile_path) == 0:
@@ -85,18 +44,7 @@ def get_specfile(workdir=WORKDIR):
     if len(specfile_path) > 1:
         raise RuntimeError(f"too many specfiles: {', '.join(specfile_path)}")
 
-    macros = get_macros(specfile_path[0])
-
-    try:
-        spec = Specfile(specfile_path[0], macros=macros)
-    except TypeError as ex:
-        raise RuntimeError("No .spec file") from ex
-    except exceptions.RPMException as ex:
-        raise RuntimeError("No .spec file") from ex
-    except OSError as ex:
-        raise RuntimeError(ex) from ex
-
-    return spec
+    return specfile_path[0]
 
 
 def apply_platform_overrides(platform_labels, architecture_decision):
@@ -131,6 +79,9 @@ def apply_platform_overrides(platform_labels, architecture_decision):
                 f"{list(arch_map.keys())}.")
 
 def get_params():
+    """
+    Parse command-line arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('selected_architectures', nargs='+', help="List of selected architectures")
     parser.add_argument('--hermetic', action="store_true", default=False,
@@ -140,8 +91,57 @@ def get_params():
                         help=("Working directory where we read/write files "
                               f"(default {WORKDIR})"))
     parser.add_argument('--platform-labels', nargs='*', default=[], help="List of platform override MPLs")
+    parser.add_argument("--macro-overrides-file",
+                        default="/etc/arch-specific-macro-overrides.json",
+                        help="JSON file with RPM macro overrides")
+    parser.add_argument(
+        "--target", default="fedora-rawhide",
+        help=("Select the distribution version we build for, e.g., 'rhel-10'. "
+              "The default is 'fedora-rawhide'.  This option affects how "
+              "some macros in given specfile are expanded, transitively "
+              "affecting ExcludeArch, ExclusiveArch and BuildArch values."))
     args = parser.parse_args()
     return args
+
+
+class TagHooks(ParserHooks):
+    """ Gather access to spec tags """
+    def __init__(self):
+        self.tags = {}
+    def tag_found(self, name, value, _tag_raw):
+        """ Gather EclusiveArch, ExcludeArch and BuildArch... """
+        if name not in ["exclusivearch", "excludearch", "buildarch"]:
+            return
+        if name not in self.tags:
+            self.tags[name] = set()
+        # even multiple exclu*arch statements are accepted
+        self.tags[name].update(value.split())
+
+
+def get_arch_specific_tags(specfile, database, target):
+    """
+    Parse given specfile (against macros from TARGET) and read ExclusiveArch,
+    ExcludeArch and BuildArch statements.  Return a dictionary with
+    `<tagname>: set()` where tagname is .tolower().
+    """
+    registry = system_macro_registry()
+    registry = override_macro_registry(registry, database, target)
+    # %dist contains %lua mess, it's safer to clear it (we don't need it)
+    registry["dist"] = ""
+    # norpm maintains a few useful tricks to ease the spec file parsing
+    registry.known_norpm_hacks()
+    tags = TagHooks()
+    try:
+        with open(specfile, "r", encoding="utf8") as fd:
+            specfile_expand(fd.read(), registry, tags)
+    except NorpmError as err:
+        print("WARNING: Building for all architectures since "
+              f"the spec file parser failed: failed: {err}")
+
+    arches = {}
+    for name in ['exclusivearch', 'excludearch', 'buildarch']:
+        arches[name] = get_arches(name, tags.tags)
+    return arches
 
 
 def _main():
@@ -155,13 +155,8 @@ def _main():
     print(f"Trying to build for {allowed_architectures}")
 
     spec = get_specfile(args.workdir)
-
-    # pylint: disable=no-member
-    tags = spec.tags(spec.parsed_sections.package).content
-    arches = {}
-    for name in ['exclusivearch', 'excludearch', 'buildarch']:
-        arches[name] = get_arches(name, tags)
-
+    arches = get_arch_specific_tags(spec, args.macro_overrides_file,
+                                    args.target)
     architecture_decision = {
         "deps-x86_64": "linux/amd64",
         "deps-i686": "linux/amd64",
