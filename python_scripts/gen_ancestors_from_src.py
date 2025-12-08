@@ -92,7 +92,7 @@ def split_archive_filename(filename):
     """
     for ext in ARCHIVE_EXTENSIONS:
         if filename.lower().endswith(ext):
-            return (filename[: -len(ext)], ext)
+            return (filename[: -len(ext)], filename[-len(ext):])
     return (filename, None)
 
 
