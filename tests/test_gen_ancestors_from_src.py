@@ -13,10 +13,11 @@ from unittest.mock import MagicMock, patch, Mock
 import urllib.error
 from urllib.parse import urlparse
 
+# for the OS without dist-git-client
 # Mock dist_git_client before importing gen_ancestors_from_src
 sys.modules["dist_git_client"] = Mock()
 
-from python_scripts.gen_ancestors_from_src import (
+from python_scripts.gen_ancestors_from_src import (  # pylint: disable=C0413 wrong-import-position
     calc_checksum,
     calc_sha256_checksum,
     split_archive_filename,
