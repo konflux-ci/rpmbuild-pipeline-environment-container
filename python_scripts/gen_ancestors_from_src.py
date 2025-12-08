@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
@@ -168,16 +169,13 @@ def is_url_accessible(url):
         return False
 
     try:
-        import urllib.request
-        import urllib.error
-
         # Create opener that follows redirects (default behavior)
         opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
         req = urllib.request.Request(url, method='HEAD')
 
         with opener.open(req, timeout=5) as response:
             return response.status == 200
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logging.debug("URL accessibility check failed for %s: %s", url, e)
         return False
 
@@ -337,7 +335,7 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
             logging.error("invalid SourceN line: %s", line)
             continue
 
-        (source, idx, loc, _, sfn, _) = m.groups()
+        (source, _, loc, _, sfn, _) = m.groups()
 
         # no need to check if it's a full URL since it is quite simple
         if loc and loc.startswith(UPSTREAM_URL_SCHEMES):
@@ -355,7 +353,7 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
             )
         # Check if this is an archive file without a remote URL
         fbn, ext = split_archive_filename(sfn)
-        
+
         if ext and not url:
             # This is an archive but doesn't have a remote URL
             logging.warning(
@@ -453,17 +451,19 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True):
                 else:
                     # Need to recalculate with midstream algorithm
                     fp = os.path.join(srcdir, sfn)
-                    if os.path.isfile(fp):
-                        try:
-                            # Replace hyphens in algorithm name without underlines,
-                            # for SPDX -> hashlib alg format
-                            alg_name = midstream_alg.replace("_", "").lower()
-                            local_checksum = calc_checksum(fp, alg_name)
-                        except Exception as e:
-                            logging.error(
-                                "[IMPORTANT] Failed to calculate checksum for %s using algorithm %s: %s",
-                                sfn, midstream_alg, e
-                            )
+                    if not os.path.isfile(fp):
+                        logging.error("[IMPORTANT] %s doesn't exist", fp)
+                        continue
+                    try:
+                        # Replace hyphens in algorithm name without underlines,
+                        # for SPDX -> hashlib alg format
+                        alg_name = midstream_alg.replace("_", "").lower()
+                        local_checksum = calc_checksum(fp, alg_name)
+                    except Exception as e:  # pylint: disable=W0718 broad-exception-caught
+                        logging.error(
+                            "[IMPORTANT] Failed to calculate checksum for %s using algorithm %s: %s",
+                            sfn, midstream_alg, e
+                        )
 
                 # Compare checksums if local checksum is available
                 if local_checksum and local_checksum != midstream_checksum:
@@ -476,6 +476,7 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True):
 
 
 def main():
+    """Parse command-line arguments and generate ancestors data for SBOM."""
     parser = ArgumentParser(usage="Generate ancestors data for SBOM from source code")
     parser.add_argument(
         "-s",
@@ -538,7 +539,7 @@ def main():
         if os.path.exists(options.output_file):
             logging.warning("output file: %s already exists", options.output_file)
         logging.info("Writing RPM manifest to %s", options.output_file)
-        fp = open(options.output_file, "wt", encoding="utf-8")
+        fp = open(options.output_file, "wt", encoding="utf-8")  # pylint: disable=R1732 consider-using-with
     else:
         fp = sys.stdout
     json.dump(result, fp, indent=2, sort_keys=False)
