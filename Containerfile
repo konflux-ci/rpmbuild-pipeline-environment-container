@@ -20,7 +20,7 @@ ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/gen-ancestors-from-src.py /usr/bin
+ADD python_scripts/gen_ancestors_from_src.py /usr/bin
 ADD python_scripts/pulp-upload.py /usr/bin
 ADD python_scripts/pulp_client.py /usr/bin
 ADD python_scripts/pulp_utils.py /usr/bin
