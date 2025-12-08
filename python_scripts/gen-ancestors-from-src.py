@@ -304,7 +304,7 @@ def search_specfile(src_dir):
                 specfiles.append(os.path.join(root, file))
     if len(specfiles) == 0:
         raise FileNotFoundError(f"No specfile found in {src_dir}")
-    elif len(specfiles) > 1:
+    if len(specfiles) > 1:
         raise OSError(f"Multiple specfiles found: {specfiles}")
     return specfiles[0]
 
