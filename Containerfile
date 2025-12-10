@@ -5,6 +5,7 @@ VOLUME /var/lib/containers
 
 ADD rpmdiff.patch /rpmdiff.patch
 ADD rpmautospec-norpm.patch /
+ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
     dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec && \
