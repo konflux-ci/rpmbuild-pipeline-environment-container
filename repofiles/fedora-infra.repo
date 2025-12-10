@@ -1,0 +1,6 @@
+[fedora-43-infra]
+baseurl = https://kojipkgs.fedoraproject.org/repos-dist/f43-infra/latest/$basearch/
+enabled = 1
+gpgcheck = 1
+gpgkey=https://infrastructure.fedoraproject.org/repo/infra/RPM-GPG-KEY-INFRA-TAGS
+name = Fedora 43 infra repo
