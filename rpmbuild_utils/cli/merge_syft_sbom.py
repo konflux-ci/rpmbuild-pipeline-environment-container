@@ -10,7 +10,8 @@ import argparse
 import hashlib
 import json
 import logging
-import subprocess
+
+from rpmbuild_utils.sbom import to_spdx_license, get_generic_purl, get_rpm_purl
 
 
 def get_params():
@@ -31,69 +32,6 @@ def get_params():
     )
     args = parser.parse_args()
     return args
-
-
-def get_generic_purl(name, version=None, url=None, checksum=None, alg=None):
-    """Generate Package URL (purl) for a source package."""
-    purl = f"pkg:generic/{name}"
-    if version:
-        purl += f"@{version}"
-    if url:
-        purl += f"?download_url={url}"
-    if checksum:
-        purl += f"&checksum={alg.lower() if alg else 'sha256'}:{checksum}"
-    return purl
-
-
-def get_rpm_purl(name, version, release, arch, epoch=None):
-    """Generate Package URL (purl) for an RPM package.
-
-    :param name: Package name
-    :type name: str
-    :param version: Package version
-    :type version: str
-    :param release: Package release
-    :type release: str
-    :param arch: Package architecture
-    :type arch: str
-    :param epoch: Package epoch (optional)
-    :type epoch: str or None
-    :returns: RPM purl string
-    :rtype: str
-    """
-    # Format: pkg:rpm/redhat/name@version-release?arch=...
-    version_str = f"{version}-{release}"
-    if epoch:
-        version_str = f"{epoch}:{version_str}"
-
-    purl = f"pkg:rpm/redhat/{name}@{version_str}?arch={arch}"
-    return purl
-
-
-def convert_rpm_license_to_spdx(rpm_license):
-    """Convert RPM license to SPDX license expression using license-fedora2spdx.
-
-    :param rpm_license: RPM license string
-    :type rpm_license: str
-    :returns: SPDX license expression, or "NOASSERTION" if conversion fails
-    :rtype: str
-    """
-    if not rpm_license:
-        return "NOASSERTION"
-
-    try:
-        result = subprocess.run(
-            ["license-fedora2spdx", rpm_license],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5
-        )
-        spdx_license = result.stdout.strip()
-        return spdx_license if spdx_license else "NOASSERTION"
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logging.warning("Failed to convert license '%s' to SPDX: %s", rpm_license, e)
-        return "NOASSERTION"
 
 
 def attach_sources(sbom_root, source_data_file):
@@ -260,7 +198,7 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
 
             # Convert RPM license to SPDX license expression
             rpm_license = rpm.get("license")
-            spdx_license = convert_rpm_license_to_spdx(rpm_license)
+            spdx_license = to_spdx_license(rpm_license)
 
             # Create buildroot package
             buildroot_pkg = {

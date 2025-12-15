@@ -12,13 +12,11 @@ Example usage:
 
 """
 from argparse import ArgumentParser
-import hashlib
 import json
 import logging
 import os
 import subprocess
 import sys
-import urllib.request
 
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
@@ -28,6 +26,7 @@ from rpmbuild_utils.rpm import (
     search_specfile,
     parse_spec_source_tags,
 )
+from rpmbuild_utils.sbom import calc_checksum, is_url_accessible
 
 UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
 RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]
@@ -51,38 +50,6 @@ ARCHIVE_EXTENSIONS = (
     ".lzma",
     ".Z",
 )
-
-
-def run_command(cmd, capture_output=True, check=True, cwd=None):
-    """Execute a command and return the result.
-
-    :param cmd: Command to execute (string or list)
-    :type cmd: str or list
-    :param capture_output: Whether to capture stdout/stderr
-    :type capture_output: bool
-    :param check: Whether to raise exception on non-zero exit code
-    :type check: bool
-    :param cwd: chdir while running the command
-    :type cwd: str
-    :returns: Completed process object
-    :rtype: subprocess.CompletedProcess
-    """
-    logging.debug("Running command: %s", cmd)
-    result = subprocess.run(
-        cmd,
-        shell=isinstance(cmd, str),
-        capture_output=capture_output,
-        text=True,
-        check=check,
-        cwd=cwd,
-        encoding="utf-8",
-    )
-    if result.stdout:
-        logging.debug("Command stdout: %s", result.stdout)
-    if result.stderr:
-        logging.debug("Command stderr: %s", result.stderr)
-    result.check_returncode()
-    return result
 
 
 def split_archive_filename(filename):
@@ -121,67 +88,6 @@ def parse_name_version(basename):
     else:
         sver = parts[-1]
     return sname, sver
-
-
-def calc_checksum(filepath, algorithm="sha256", chunk_size=1024**2):
-    """Calculate checksum of a file using specified algorithm.
-
-    :param filepath: Path to the file
-    :type filepath: str
-    :param algorithm: Hash algorithm (e.g., 'sha256', 'sha512', 'md5')
-    :type algorithm: str
-    :param chunk_size: Size of chunks to read
-    :type chunk_size: int
-    :returns: Hexadecimal checksum string
-    :rtype: str
-    """
-    h = hashlib.new(algorithm.lower())
-    with open(filepath, "rb") as fp:
-        while True:
-            data = fp.read(chunk_size)
-            if not data:
-                break
-            h.update(data)
-    return h.hexdigest()
-
-
-def calc_sha256_checksum(filepath, chunk_size=1024**2):
-    """Calculate SHA-256 checksum of a file.
-
-    :param filepath: Path to the file
-    :type filepath: str
-    :param chunk_size: Size of chunks to read
-    :type chunk_size: int
-    :returns: SHA-256 hexadecimal checksum string
-    :rtype: str
-    """
-    return calc_checksum(filepath, "sha256", chunk_size)
-
-
-def is_url_accessible(url):
-    """Verify whether a URL is accessible.
-
-    Performs an HTTP HEAD request to check if the URL can be reached.
-    Automatically follows redirects.
-
-    :param url: URL to verify
-    :type url: str
-    :returns: True if URL is accessible, False otherwise
-    :rtype: bool
-    """
-    if not url:
-        return False
-
-    try:
-        # Create opener that follows redirects (default behavior)
-        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
-        req = urllib.request.Request(url, method='HEAD')
-
-        with opener.open(req, timeout=5) as response:
-            return response.status == 200
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logging.debug("URL accessibility check failed for %s: %s", url, e)
-        return False
 
 
 def load_distgit_config(srcdir, dist_git_config_dir):

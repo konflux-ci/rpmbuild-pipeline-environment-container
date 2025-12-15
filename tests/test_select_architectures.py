@@ -21,7 +21,7 @@ SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 
 class TestSelectArchitectures(TestCase):
     """
-    Unit tests for python_scripts/select_architectures.py.
+    Unit tests for rpmbuild_utils/cli/select_architectures.py.
     """
     # pylint: disable=too-many-public-methods
     def setUp(self):
