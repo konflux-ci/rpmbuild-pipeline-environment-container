@@ -13,7 +13,9 @@ import unittest
 from rpmbuild_utils.cli.merge_syft_sbom import (
     _main as merge_syft_sbom,
     get_generic_purl,
+    get_rpm_purl,
     attach_sources,
+    attach_buildroot_packages,
 )
 
 
@@ -283,6 +285,310 @@ class TestAttachSources(unittest.TestCase):
 
             origin_pkg = sbom_root['packages'][1]
             self.assertEqual(origin_pkg['versionInfo'], 'unknown')
+        finally:
+            os.unlink(temp_file)
+
+
+class TestGetRpmPurl(unittest.TestCase):
+    """
+    Unit tests for get_rpm_purl function.
+    """
+
+    def test_minimal_rpm_purl(self):
+        """Test RPM purl with minimal fields."""
+        purl = get_rpm_purl(
+            name="gcc",
+            version="11.3.1",
+            release="4.el9",
+            arch="x86_64"
+        )
+        self.assertEqual(purl, "pkg:rpm/redhat/gcc@11.3.1-4.el9?arch=x86_64")
+
+    def test_rpm_purl_with_epoch(self):
+        """Test RPM purl with epoch."""
+        purl = get_rpm_purl(
+            name="systemd",
+            version="252",
+            release="13.el9",
+            arch="aarch64",
+            epoch="2"
+        )
+        self.assertEqual(purl, "pkg:rpm/redhat/systemd@2:252-13.el9?arch=aarch64")
+
+    def test_rpm_purl_noarch(self):
+        """Test RPM purl with noarch architecture."""
+        purl = get_rpm_purl(
+            name="python3-pip",
+            version="21.2.3",
+            release="7.el9",
+            arch="noarch"
+        )
+        self.assertEqual(purl, "pkg:rpm/redhat/python3-pip@21.2.3-7.el9?arch=noarch")
+
+
+class TestAttachBuildrootPackages(unittest.TestCase):
+    """
+    Unit tests for attach_buildroot_packages function.
+    """
+
+    def test_attach_single_lockfile(self):
+        """Test attaching buildroot packages from single lockfile."""
+        sbom_root = {
+            "name": "test-pkg-1.1.1-1.el9",
+            "packages": [],
+            "relationships": []
+        }
+
+        lockfile_data = {
+            "config": {
+                "target_arch": "x86_64"
+            },
+            "buildroot": {
+                "rpms": [
+                    {
+                        "name": "gcc",
+                        "version": "11.3.1",
+                        "release": "4.el9",
+                        "arch": "x86_64",
+                        "epoch": None,
+                        "license": "GPL-3.0-or-later",
+                        "url": "https://example.com/gcc-11.3.1-4.el9.x86_64.rpm",
+                        "sigmd5": "abc123def456"
+                    },
+                    {
+                        "name": "glibc",
+                        "version": "2.34",
+                        "release": "60.el9",
+                        "arch": "x86_64",
+                        "epoch": None,
+                        "license": "LGPL-2.1-or-later",
+                        "url": "https://example.com/glibc-2.34-60.el9.x86_64.rpm",
+                        "sigmd5": "def456ghi789"
+                    }
+                ]
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(lockfile_data, f)
+            temp_file = f.name
+
+        try:
+            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+
+            # Should have 3 packages: 1 virtual + 2 buildroot
+            self.assertEqual(len(sbom_root['packages']), 3)
+
+            # Check virtual buildroot package
+            virtual_pkg = sbom_root['packages'][0]
+            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86_64')
+            self.assertEqual(virtual_pkg['name'], 'test-pkg-buildroot-x86_64')
+            self.assertEqual(virtual_pkg['downloadLocation'], 'NOASSERTION')
+            self.assertEqual(virtual_pkg['filesAnalyzed'], False)
+
+            # Check first buildroot package
+            gcc_pkg = sbom_root['packages'][1]
+            self.assertEqual(gcc_pkg['SPDXID'], 'SPDXRef-Buildroot-Package-gcc-x86_64')
+            self.assertEqual(gcc_pkg['name'], 'gcc')
+            self.assertEqual(gcc_pkg['versionInfo'], '11.3.1-4.el9')
+            self.assertEqual(gcc_pkg['licenseDeclared'], 'GPL-3.0-or-later')
+            self.assertEqual(gcc_pkg['supplier'], 'Organization: Red Hat')
+
+            # Check checksums
+            self.assertEqual(len(gcc_pkg['checksums']), 1)
+            self.assertEqual(gcc_pkg['checksums'][0]['algorithm'], 'MD5')
+            self.assertEqual(gcc_pkg['checksums'][0]['checksumValue'], 'abc123def456')
+
+            # Check purl
+            self.assertEqual(len(gcc_pkg['externalRefs']), 1)
+            self.assertIn('pkg:rpm/redhat/gcc@11.3.1-4.el9?arch=x86_64',
+                          gcc_pkg['externalRefs'][0]['referenceLocator'])
+
+            # Check relationships - should have 2 CONTAINS relationships
+            contains_rels = [r for r in sbom_root['relationships'] if r['relationshipType'] == 'CONTAINS']
+            self.assertEqual(len(contains_rels), 2)
+
+            # Verify CONTAINS relationships
+            for rel in contains_rels:
+                self.assertEqual(rel['spdxElementId'], 'SPDXRef-Buildroot-test-pkg-x86_64')
+                self.assertIn(rel['relatedSpdxElement'],
+                              ['SPDXRef-Buildroot-Package-gcc-x86_64',
+                               'SPDXRef-Buildroot-Package-glibc-x86_64'])
+        finally:
+            os.unlink(temp_file)
+
+    def test_attach_multiple_lockfiles(self):
+        """Test attaching buildroot packages from multiple lockfiles (different architectures)."""
+        sbom_root = {
+            "name": "test-pkg-1.1.1-1.el9",
+            "packages": [
+                {
+                    "SPDXID": "SPDXRef-x86-64-test-pkg",
+                    "name": "test-pkg",
+                    "externalRefs": [{
+                        "referenceLocator": "pkg:rpm/redhat/test-pkg@1.1.1-1.el9?arch=x86_64"
+                    }]
+                },
+                {
+                    "SPDXID": "SPDXRef-aarch64-test-pkg",
+                    "name": "test-pkg",
+                    "externalRefs": [{
+                        "referenceLocator": "pkg:rpm/redhat/test-pkg@1.1.1-1.el9?arch=aarch64"
+                    }]
+                }
+            ],
+            "relationships": []
+        }
+
+        lockfile_x86_64 = {
+            "config": {"target_arch": "x86_64"},
+            "buildroot": {
+                "rpms": [{
+                    "name": "gcc",
+                    "version": "11.3.1",
+                    "release": "4.el9",
+                    "arch": "x86_64",
+                    "epoch": None,
+                    "license": "GPL-3.0-or-later",
+                    "url": "https://example.com/gcc.rpm",
+                    "sigmd5": "abc123"
+                }]
+            }
+        }
+
+        lockfile_aarch64 = {
+            "config": {"target_arch": "aarch64"},
+            "buildroot": {
+                "rpms": [{
+                    "name": "gcc",
+                    "version": "11.3.1",
+                    "release": "4.el9",
+                    "arch": "aarch64",
+                    "epoch": None,
+                    "license": "GPL-3.0-or-later",
+                    "url": "https://example.com/gcc-aarch64.rpm",
+                    "sigmd5": "def456"
+                }]
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f1:
+            json.dump(lockfile_x86_64, f1)
+            temp_file1 = f1.name
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f2:
+            json.dump(lockfile_aarch64, f2)
+            temp_file2 = f2.name
+
+        try:
+            attach_buildroot_packages(sbom_root, [temp_file1, temp_file2], "test-pkg")
+
+            # Should have 2 original + 2 virtual + 2 buildroot = 6 packages
+            self.assertEqual(len(sbom_root['packages']), 6)
+
+            # Check virtual packages exist for both architectures
+            virtual_ids = [pkg['SPDXID'] for pkg in sbom_root['packages']
+                           if pkg['SPDXID'].startswith('SPDXRef-Buildroot-') and '-buildroot-' in pkg['name']]
+            self.assertIn('SPDXRef-Buildroot-test-pkg-x86_64', virtual_ids)
+            self.assertIn('SPDXRef-Buildroot-test-pkg-aarch64', virtual_ids)
+
+            # Check buildroot packages exist for both architectures
+            buildroot_ids = [pkg['SPDXID'] for pkg in sbom_root['packages']
+                             if pkg['SPDXID'].startswith('SPDXRef-Buildroot-Package-')]
+            self.assertIn('SPDXRef-Buildroot-Package-gcc-x86_64', buildroot_ids)
+            self.assertIn('SPDXRef-Buildroot-Package-gcc-aarch64', buildroot_ids)
+
+            # Check BUILD_TOOL_OF relationships
+            build_tool_rels = [r for r in sbom_root['relationships']
+                               if r['relationshipType'] == 'BUILD_TOOL_OF']
+            self.assertEqual(len(build_tool_rels), 2)
+
+            # Verify x86_64 BUILD_TOOL_OF relationship
+            x86_rel = [r for r in build_tool_rels
+                       if r['spdxElementId'] == 'SPDXRef-Buildroot-test-pkg-x86_64'][0]
+            self.assertEqual(x86_rel['relatedSpdxElement'], 'SPDXRef-x86-64-test-pkg')
+
+            # Verify aarch64 BUILD_TOOL_OF relationship
+            aarch_rel = [r for r in build_tool_rels
+                         if r['spdxElementId'] == 'SPDXRef-Buildroot-test-pkg-aarch64'][0]
+            self.assertEqual(aarch_rel['relatedSpdxElement'], 'SPDXRef-aarch64-test-pkg')
+        finally:
+            os.unlink(temp_file1)
+            os.unlink(temp_file2)
+
+    def test_attach_buildroot_with_epoch(self):
+        """Test buildroot package with epoch in version."""
+        sbom_root = {
+            "name": "test-pkg-1.1.1-1.el9",
+            "packages": [],
+            "relationships": []
+        }
+
+        lockfile_data = {
+            "config": {"target_arch": "x86_64"},
+            "buildroot": {
+                "rpms": [{
+                    "name": "systemd",
+                    "version": "252",
+                    "release": "13.el9",
+                    "arch": "x86_64",
+                    "epoch": "2",
+                    "license": "LGPL-2.1-or-later",
+                    "url": "https://example.com/systemd.rpm"
+                }]
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(lockfile_data, f)
+            temp_file = f.name
+
+        try:
+            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+
+            # Find systemd package
+            systemd_pkg = [pkg for pkg in sbom_root['packages']
+                           if pkg['name'] == 'systemd'][0]
+
+            # Check version includes epoch
+            self.assertEqual(systemd_pkg['versionInfo'], '2:252-13.el9')
+
+            # Check purl includes epoch
+            purl = systemd_pkg['externalRefs'][0]['referenceLocator']
+            self.assertIn('2:252-13.el9', purl)
+        finally:
+            os.unlink(temp_file)
+
+    def test_skip_lockfile_without_target_arch(self):
+        """Test that lockfiles without target_arch are skipped."""
+        sbom_root = {
+            "name": "test-pkg-1.1.1-1.el9",
+            "packages": [],
+            "relationships": []
+        }
+
+        lockfile_data = {
+            "config": {},  # No target_arch
+            "buildroot": {
+                "rpms": [{
+                    "name": "gcc",
+                    "version": "11.3.1",
+                    "release": "4.el9",
+                    "arch": "x86_64"
+                }]
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(lockfile_data, f)
+            temp_file = f.name
+
+        try:
+            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+
+            # Should have no packages added
+            self.assertEqual(len(sbom_root['packages']), 0)
+            self.assertEqual(len(sbom_root['relationships']), 0)
         finally:
             os.unlink(temp_file)
 
