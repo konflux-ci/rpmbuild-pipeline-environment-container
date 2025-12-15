@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import logging
+import subprocess
 
 
 def get_params():
@@ -67,6 +68,32 @@ def get_rpm_purl(name, version, release, arch, epoch=None):
 
     purl = f"pkg:rpm/redhat/{name}@{version_str}?arch={arch}"
     return purl
+
+
+def convert_rpm_license_to_spdx(rpm_license):
+    """Convert RPM license to SPDX license expression using license-fedora2spdx.
+
+    :param rpm_license: RPM license string
+    :type rpm_license: str
+    :returns: SPDX license expression, or "NOASSERTION" if conversion fails
+    :rtype: str
+    """
+    if not rpm_license:
+        return "NOASSERTION"
+
+    try:
+        result = subprocess.run(
+            ["license-fedora2spdx", rpm_license],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5
+        )
+        spdx_license = result.stdout.strip()
+        return spdx_license if spdx_license else "NOASSERTION"
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logging.warning("Failed to convert license '%s' to SPDX: %s", rpm_license, e)
+        return "NOASSERTION"
 
 
 def attach_sources(sbom_root, source_data_file):
@@ -231,13 +258,17 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
             if rpm.get('epoch'):
                 version_str = f"{rpm['epoch']}:{version_str}"
 
+            # Convert RPM license to SPDX license expression
+            rpm_license = rpm.get("license")
+            spdx_license = convert_rpm_license_to_spdx(rpm_license)
+
             # Create buildroot package
             buildroot_pkg = {
                 "SPDXID": spdx_id,
                 "name": rpm["name"],
                 "versionInfo": version_str,
                 "downloadLocation": rpm.get("url", "NOASSERTION"),
-                "licenseDeclared": rpm.get("license", "NOASSERTION"),
+                "licenseDeclared": spdx_license,
                 "filesAnalyzed": False,
                 "supplier": "Organization: Red Hat",
             }
