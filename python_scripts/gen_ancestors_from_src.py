@@ -15,7 +15,6 @@ from argparse import ArgumentParser
 import json
 import logging
 import os
-import subprocess
 import sys
 
 from dist_git_client import _load_config as load_dist_git_config
@@ -49,38 +48,6 @@ ARCHIVE_EXTENSIONS = (
     ".lzma",
     ".Z",
 )
-
-
-def run_command(cmd, capture_output=True, check=True, cwd=None):
-    """Execute a command and return the result.
-
-    :param cmd: Command to execute (string or list)
-    :type cmd: str or list
-    :param capture_output: Whether to capture stdout/stderr
-    :type capture_output: bool
-    :param check: Whether to raise exception on non-zero exit code
-    :type check: bool
-    :param cwd: chdir while running the command
-    :type cwd: str
-    :returns: Completed process object
-    :rtype: subprocess.CompletedProcess
-    """
-    logging.debug("Running command: %s", cmd)
-    result = subprocess.run(
-        cmd,
-        shell=isinstance(cmd, str),
-        capture_output=capture_output,
-        text=True,
-        check=check,
-        cwd=cwd,
-        encoding="utf-8",
-    )
-    if result.stdout:
-        logging.debug("Command stdout: %s", result.stdout)
-    if result.stderr:
-        logging.debug("Command stderr: %s", result.stderr)
-    result.check_returncode()
-    return result
 
 
 def split_archive_filename(filename):
