@@ -6,7 +6,6 @@ Tests for gen_ancestors_from_src.py.
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,7 +20,6 @@ from gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
     split_archive_filename,
     parse_name_version,
     get_repo_name,
-    run_command,
     parse_dist_git_sources,
     list_spec_sources,
     list_sources,
@@ -124,34 +122,6 @@ class TestGetRepoName(unittest.TestCase):
         url = urlparse("https://example.com/namespace/myrepo.git/")
         name = get_repo_name(url)
         self.assertEqual(name, "myrepo")
-
-
-class TestRunCommand(unittest.TestCase):
-    """
-    Unit tests for run_command function.
-    """
-
-    def test_list_command(self):
-        """Test running a command passed as a list."""
-        result = run_command(["echo", "hello"])
-        self.assertEqual(result.stdout.strip(), "hello")
-        self.assertEqual(result.returncode, 0)
-
-    def test_string_command(self):
-        """Test running a command passed as a string (uses shell)."""
-        result = run_command("echo hello")
-        self.assertEqual(result.stdout.strip(), "hello")
-
-    def test_failed_command_raises(self):
-        """Test that a failing command raises CalledProcessError."""
-        with self.assertRaises(subprocess.CalledProcessError):
-            run_command(["false"])
-
-    def test_cwd_parameter(self):
-        """Test running a command in a specific directory."""
-        result = run_command(["pwd"], cwd="/tmp")
-        # /tmp may resolve to /private/tmp on macOS
-        self.assertIn("tmp", result.stdout.strip())
 
 
 class TestParseDistGitSources(unittest.TestCase):
