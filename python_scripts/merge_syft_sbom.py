@@ -46,7 +46,8 @@ def attach_sources(sbom_root, source_data_file):
     :param sbom_root: The root SBOM dictionary to modify, which contains (S)RPMs data
     :param source_data_file: Path to JSON file with source data from gen_ancestors_from_src.py
     """
-    source_data = json.load(open(source_data_file))
+    with open(source_data_file, encoding="utf-8") as f:
+        source_data = json.load(f)
     sources = source_data.get('sources', [])
 
     # Add source packages to SBOM
@@ -134,8 +135,10 @@ def attach_sources(sbom_root, source_data_file):
 
 
 def merge_sboms(root_sbom, syft_sbom, output_sbom, source_data_file=None):
-    sbom_root = json.load(open(root_sbom))
-    sbom_syft = json.load(open(syft_sbom))
+    with open(root_sbom, encoding="utf-8") as f:
+        sbom_root = json.load(f)
+    with open(syft_sbom, encoding="utf-8") as f:
+        sbom_syft = json.load(f)
 
     # https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/build/from-koji.py
     syft_pkgs = sbom_syft.get('packages', [])
@@ -162,7 +165,8 @@ def merge_sboms(root_sbom, syft_sbom, output_sbom, source_data_file=None):
     if source_data_file:
         attach_sources(sbom_root, source_data_file)
 
-    json.dump(sbom_root, open(output_sbom, 'wt'))
+    with open(output_sbom, 'wt', encoding="utf-8") as f:
+        json.dump(sbom_root, f)
 
 
 def _main():
