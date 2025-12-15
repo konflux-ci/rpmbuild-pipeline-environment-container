@@ -9,7 +9,7 @@ ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
     dnf -y install mock koji dist-git-client patch python3-norpm \
-      redhat-rpm-config acl rpmdevtools rpmautospec && \
+      redhat-rpm-config acl rpmdevtools rpmautospec license-validate && \
     patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
