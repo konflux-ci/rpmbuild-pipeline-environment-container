@@ -18,6 +18,11 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
+<<<<<<< HEAD
+=======
+ADD python_scripts/gather-rpms.py /usr/bin
+ADD python_scripts/gen_ancestors_from_src.py /usr/bin
+>>>>>>> 45ae5bf (Containerfile: fix pulp_upload.py file name)
 ADD python_scripts/pulp_upload.py /usr/bin
 ADD python_scripts/pulp_client.py /usr/bin
 ADD python_scripts/pulp_utils.py /usr/bin
