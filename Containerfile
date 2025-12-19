@@ -32,6 +32,8 @@ ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.p
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
+ADD patch-git-prepare.sh /usr/bin
+
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
 RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \
     /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
