@@ -1,0 +1,43 @@
+commit c8d343a3ff7f6be17ff1d0dd7f89d06845c0a18b
+Author:     Pavel Raiskup <praiskup@redhat.com>
+AuthorDate: Thu Mar 6 18:43:42 2025 +0100
+Commit:     Pavel Raiskup <praiskup@redhat.com>
+CommitDate: Thu Mar 6 19:23:04 2025 +0100
+
+    Correct Tekton path
+
+:000000 100644 0000000 2bca131 A	.tekton/environment-pull-request.yaml
+:000000 100644 0000000 0397e8d A	.tekton/environment-push.yaml
+:100644 000000 2bca131 0000000 D	environment-pull-request.yaml
+:100644 000000 0397e8d 0000000 D	environment-push.yaml
+
+commit 8c78e9e9c32492c00a75b31a281c57cc69e42f66
+Author:     Pavel Raiskup <praiskup@redhat.com>
+AuthorDate: Thu Mar 6 14:15:36 2025 +0100
+Commit:     Pavel Raiskup <praiskup@redhat.com>
+CommitDate: Thu Mar 6 14:24:17 2025 +0100
+
+    Tektonize
+
+:000000 100644 0000000 2bca131 A	environment-pull-request.yaml
+:000000 100644 0000000 0397e8d A	environment-push.yaml
+
+commit e0ea9d05f330a91bb1a5f60005bfae30a4b18df0
+Author:     Pavel Raiskup <praiskup@redhat.com>
+AuthorDate: Tue Mar 4 12:47:00 2025 +0100
+Commit:     Pavel Raiskup <praiskup@redhat.com>
+CommitDate: Tue Mar 4 12:47:00 2025 +0100
+
+    Fully-qualified image reference
+
+:100644 100644 e4c5edd dfea447 M	Containerfile
+
+commit 1fca25484f458311cb64536cec315e62f275cdc1
+Author:     Pavel Raiskup <praiskup@redhat.com>
+AuthorDate: Tue Mar 4 12:40:07 2025 +0100
+Commit:     Pavel Raiskup <praiskup@redhat.com>
+CommitDate: Tue Mar 4 12:44:25 2025 +0100
+
+    Initial commit
+
+:000000 100644 0000000 e4c5edd A	Containerfile

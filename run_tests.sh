@@ -40,6 +40,8 @@ download_files test-source-rpms \
                 broken-noarch-subpackage/x86_64/test-noarch-check-1-1.fc42.x86_64.rpm \
                 broken-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm
 
+download_files test-git-repos git-repos/rpmbuild-pipeline-git.tar.gz
+
 coverage=( --cov-report term-missing --cov python_scripts )
 for arg; do
     case $arg in
