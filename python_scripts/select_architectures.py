@@ -1,7 +1,6 @@
 #! /usr/bin/python3
 
 import argparse
-import glob
 import json
 import os
 import random
@@ -10,6 +9,8 @@ from norpm.macrofile import system_macro_registry
 from norpm.specfile import specfile_expand, ParserHooks
 from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
+
+from .rpm_utils import search_specfile  # pylint: disable=E0402 relative-beyond-top-level
 
 
 WORKDIR = '/var/workdir/source'
@@ -30,21 +31,6 @@ def get_arches(name, tags):
         print(f"Unknown macros in {name_map[name]}: {unknown}")
         return set()
     return set(values)
-
-
-def get_specfile(workdir=WORKDIR):
-    """
-    Find & return the specfile path in given WORKDIR.
-    """
-    specfile_path = glob.glob(os.path.join(workdir, '*.spec'))
-
-    if len(specfile_path) == 0:
-        raise RuntimeError("no spec file available")
-
-    if len(specfile_path) > 1:
-        raise RuntimeError(f"too many specfiles: {', '.join(specfile_path)}")
-
-    return specfile_path[0]
 
 
 def apply_platform_overrides(platform_labels, architecture_decision):
@@ -154,7 +140,7 @@ def _main():
     allowed_architectures = set(args.selected_architectures)
     print(f"Trying to build for {allowed_architectures}")
 
-    spec = get_specfile(args.workdir)
+    spec = search_specfile(args.workdir)
     arches = get_arch_specific_tags(spec, args.macro_overrides_file,
                                     args.target_distribution)
     architecture_decision = {
