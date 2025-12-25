@@ -24,6 +24,8 @@ import urllib.request
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
+from .rpm_utils import search_specfile  # pylint: disable=E0402 relative-beyond-top-level
+
 UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
 RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]
 SOURCE_RE = re.compile(r"^(source(\d+))\s*:\s*((.*/)?(.*))(\d+#.*)?$", re.IGNORECASE)
@@ -283,28 +285,6 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
 
     logging.debug("Parsed sources file: %s", sources_map)
     return sources_map
-
-
-def search_specfile(src_dir):
-    """Search for a specfile in the given source directory.
-
-    :param src_dir: Source directory to search in
-    :type src_dir: str
-    :returns: Path to the specfile if found
-    :rtype: str
-    :raises FileNotFoundError: If no specfile found
-    :raises OSError: If multiple specfiles found
-    """
-    specfiles = []
-    for root, _, files in os.walk(src_dir):
-        for file in files:
-            if file.endswith(".spec"):
-                specfiles.append(os.path.join(root, file))
-    if len(specfiles) == 0:
-        raise FileNotFoundError(f"No specfile found in {src_dir}")
-    if len(specfiles) > 1:
-        raise OSError(f"Multiple specfiles found: {specfiles}")
-    return specfiles[0]
 
 
 def list_spec_sources(specfile, srcdir=".", url_verify=True):

@@ -19,16 +19,7 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/gen_ancestors_from_src.py /usr/bin
-ADD python_scripts/pulp_upload.py /usr/bin
-ADD python_scripts/pulp_client.py /usr/bin
-ADD python_scripts/pulp_utils.py /usr/bin
-ADD python_scripts/pulp_transfer.py /usr/bin
-
-ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
-ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
-ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
+ADD python_scripts/*.py /usr/bin/
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
