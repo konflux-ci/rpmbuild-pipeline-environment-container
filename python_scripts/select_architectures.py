@@ -5,32 +5,13 @@ import json
 import os
 import random
 
-from norpm.macrofile import system_macro_registry
-from norpm.specfile import specfile_expand, ParserHooks
-from norpm.overrides import override_macro_registry
-from norpm.exceptions import NorpmError
-
-from .rpm_utils import search_specfile  # pylint: disable=E0402 relative-beyond-top-level
+from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
+    search_specfile,
+    get_arch_specific_tags,
+)
 
 
 WORKDIR = '/var/workdir/source'
-
-
-def get_arches(name, tags):
-    """
-    Evaluated %{exclusivearch|excludearch|buildarch} as a list
-    """
-    name_map = {
-        'exclusivearch': 'ExclusiveArch',
-        'excludearch': 'ExcludeArch',
-        'buildarch': 'BuildArch',
-    }
-    values = tags.get(name, set())
-    unknown = " ".join([x for x in values if x.startswith("%")])
-    if unknown:
-        print(f"Unknown macros in {name_map[name]}: {unknown}")
-        return set()
-    return set(values)
 
 
 def apply_platform_overrides(platform_labels, architecture_decision):
@@ -88,46 +69,6 @@ def get_params():
               "affecting ExcludeArch, ExclusiveArch and BuildArch values."))
     args = parser.parse_args()
     return args
-
-
-class TagHooks(ParserHooks):
-    """ Gather access to spec tags """
-    def __init__(self):
-        self.tags = {}
-    def tag_found(self, name, value, _tag_raw):
-        """ Gather EclusiveArch, ExcludeArch and BuildArch... """
-        if name not in ["exclusivearch", "excludearch", "buildarch"]:
-            return
-        if name not in self.tags:
-            self.tags[name] = set()
-        # even multiple exclu*arch statements are accepted
-        self.tags[name].update(value.split())
-
-
-def get_arch_specific_tags(specfile, database, target_distribution):
-    """
-    Parse given specfile (against macros from TARGET_DISTRIBUTION) and read ExclusiveArch,
-    ExcludeArch and BuildArch statements.  Return a dictionary with
-    `<tagname>: set()` where tagname is .tolower().
-    """
-    registry = system_macro_registry()
-    registry = override_macro_registry(registry, database, target_distribution)
-    # %dist contains %lua mess, it's safer to clear it (we don't need it)
-    registry["dist"] = ""
-    # norpm maintains a few useful tricks to ease the spec file parsing
-    registry.known_norpm_hacks()
-    tags = TagHooks()
-    try:
-        with open(specfile, "r", encoding="utf8") as fd:
-            specfile_expand(fd.read(), registry, tags)
-    except NorpmError as err:
-        print("WARNING: Building for all architectures since "
-              f"the spec file parser failed: failed: {err}")
-
-    arches = {}
-    for name in ['exclusivearch', 'excludearch', 'buildarch']:
-        arches[name] = get_arches(name, tags.tags)
-    return arches
 
 
 def _main():
