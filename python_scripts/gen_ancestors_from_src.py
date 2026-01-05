@@ -16,7 +16,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 import urllib.request
@@ -24,11 +23,13 @@ import urllib.request
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
-from .rpm_utils import search_specfile  # pylint: disable=E0402 relative-beyond-top-level
+from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
+    search_specfile,
+    parse_spec_source_tags,
+)
 
 UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
 RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]
-SOURCE_RE = re.compile(r"^(source(\d+))\s*:\s*((.*/)?(.*))(\d+#.*)?$", re.IGNORECASE)
 ARCHIVE_EXTENSIONS = (
     ".tar.gz",
     ".tgz",
@@ -287,8 +288,8 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
     return sources_map
 
 
-def list_spec_sources(specfile, srcdir=".", url_verify=True):
-    """List sources from specfile using rpmdev-spectool.
+def list_spec_sources(specfile, srcdir=".", url_verify=True, database=None, target=None):
+    """List sources from specfile using python-norpm.
 
     :param specfile: Path to the specfile
     :type specfile: str
@@ -296,41 +297,41 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
     :type srcdir: str
     :param url_verify: Whether to validate URL accessibility
     :type url_verify: bool
+    :param database: Optional path to JSON file with RPM macro overrides
+    :type database: str or None
+    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10')
+    :type target: str or None
     :returns: List of source dictionaries
     :rtype: list
     """
     sources = []
-    result = run_command(
-        [
-            "rpmdev-spectool",
-            "-d",
-            f"_sourcedir {srcdir}",
-            "--sources",
-            specfile,
-        ]
-    )
-    for line in result.stdout.splitlines():
-        m = SOURCE_RE.match(line)
-        if not m:
-            logging.error("invalid SourceN line: %s", line)
-            continue
 
-        (source, _, loc, _, sfn, _) = m.groups()
+    # Parse spec file to get Source tags
+    source_tags = parse_spec_source_tags(specfile, srcdir, database, target)
 
-        # no need to check if it's a full URL since it is quite simple
-        if loc and loc.startswith(UPSTREAM_URL_SCHEMES):
+    # Process captured sources
+    for source_num, loc in source_tags.items():
+        source_tag = f"Source{source_num}"
+
+        # Extract filename from location
+        # If it's a URL, filename is the last component
+        # If it's a local path, use basename
+        if loc.startswith(UPSTREAM_URL_SCHEMES):
             url = loc
+            sfn = os.path.basename(url.split("#")[0])  # Remove fragment, get basename
             # Verify the URL is accessible (if validation is enabled)
             if url_verify and not is_url_accessible(url):
                 logging.warning("[IMPORTANT] %s: Upstream URL for %s is not accessible: %s",
-                                source, sfn, url)
+                                source_tag, sfn, url)
         else:
             url = None
+            sfn = os.path.basename(loc)
             # TODO: maybe only accept HTTP(S)?
             logging.info(
                 "%s: not an accepted url. Expecting %s, but got %s. skipped",
-                source, UPSTREAM_URL_SCHEMES, loc
+                source_tag, UPSTREAM_URL_SCHEMES, loc
             )
+
         # Check if this is an archive file without a remote URL
         fbn, ext = split_archive_filename(sfn)
 
@@ -338,7 +339,7 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
             # This is an archive but doesn't have a remote URL
             logging.warning(
                 "[IMPORTANT] %s: Archive file %s does not have a remote URL. Location: %s",
-                source, sfn, loc
+                source_tag, sfn, loc
             )
 
         sname, sver = parse_name_version(fbn)
@@ -355,9 +356,10 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
             src_entry["alg"] = "SHA256"
             src_entry["checksum"] = calc_checksum(fp, algorithm="sha256")
         else:
-            logging.error("%s: %s doesn't exist in srcdir: %s", source, sfn, srcdir)
-        logging.debug("%s info: %s", source, src_entry)
+            logging.error("%s: %s doesn't exist in srcdir: %s", source_tag, sfn, srcdir)
+        logging.debug("%s info: %s", source_tag, src_entry)
         sources.append(src_entry)
+
     return sources
 
 
@@ -379,7 +381,8 @@ def get_repo_name(remote_url):
     return repo_name
 
 
-def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True):
+def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True,
+                 database=None, target=None):
     """List sources with midstream information from dist-git sources file.
 
     Combines spec sources from rpmdev-spectool with midstream checksums
@@ -395,11 +398,15 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True):
     :type distgit_config: dict
     :param url_verify: Whether to validate URL accessibility
     :type url_verify: bool
+    :param database: Optional path to JSON file with RPM macro overrides
+    :type database: str or None
+    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10')
+    :type target: str or None
     :returns: List of source dictionaries with midstream property
     :rtype: list
     """
     # Get sources from specfile
-    sources = list_spec_sources(specfile, srcdir, url_verify)
+    sources = list_spec_sources(specfile, srcdir, url_verify, database, target)
 
     # Get sources file path from dist-git config
     sources_file_template = distgit_config.get("sources_file", "sources")
@@ -483,6 +490,19 @@ def main():
         default=False,
         help="Disable URL accessibility validation",
     )
+    parser.add_argument(
+        "--macro-overrides-file",
+        action="store",
+        default="/etc/arch-specific-macro-overrides.json",
+        help="JSON file with RPM macro overrides",
+    )
+    parser.add_argument(
+        "--target",
+        default="fedora-rawhide",
+        help=("Select the distribution version we build for, e.g., 'rhel-10'. "
+              "The default is 'fedora-rawhide'. This option affects how "
+              "some macros in given specfile are expanded."),
+    )
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
@@ -513,7 +533,10 @@ def main():
     # Determine whether to validate lookaside URLs
     validate_url = not options.no_url_verify
 
-    sources = list_sources(specfile, src_dir, repo_name, distgit_config, validate_url)
+    sources = list_sources(
+        specfile, src_dir, repo_name, distgit_config, validate_url,
+        options.macro_overrides_file, options.target
+    )
     result = {"sources": sources}
     if options.output_file:
         if os.path.exists(options.output_file):
