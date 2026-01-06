@@ -381,8 +381,57 @@ def get_repo_name(remote_url):
     return repo_name
 
 
-def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True,
-                 database=None, target=None):
+def _verify_source_checksum(src_entry, midstream_info, srcdir):
+    """Verify source checksum against midstream checksum.
+
+    :param src_entry: Source entry dictionary
+    :type src_entry: dict
+    :param midstream_info: Midstream source information
+    :type midstream_info: dict
+    :param srcdir: Source directory path
+    :type srcdir: str
+    """
+    if "checksum" not in midstream_info:
+        return
+
+    midstream_alg = midstream_info.get("alg", "SHA256")
+    midstream_checksum = midstream_info["checksum"]
+    sfn = src_entry["filename"]
+
+    # Get local checksum, reusing if algorithm matches
+    local_alg = src_entry.get("alg", "").upper()
+    local_checksum = None
+
+    if local_alg == midstream_alg.upper():
+        # Reuse already calculated checksum
+        local_checksum = src_entry.get("checksum")
+    else:
+        # Need to recalculate with midstream algorithm
+        fp = os.path.join(srcdir, sfn)
+        if not os.path.isfile(fp):
+            logging.error("[IMPORTANT] %s doesn't exist", fp)
+            return
+        try:
+            # Replace hyphens in algorithm name without underlines,
+            # for SPDX -> hashlib alg format
+            alg_name = midstream_alg.replace("_", "").lower()
+            local_checksum = calc_checksum(fp, alg_name)
+        except Exception as e:  # pylint: disable=W0718 broad-exception-caught
+            logging.error(
+                "[IMPORTANT] Failed to calculate checksum for %s using algorithm %s: %s",
+                sfn, midstream_alg, e
+            )
+
+    # Compare checksums if local checksum is available
+    if local_checksum and local_checksum != midstream_checksum:
+        logging.warning(
+            "[IMPORTANT] Checksum mismatch for %s: local=%s, midstream=%s (algorithm: %s)",
+            sfn, local_checksum, midstream_checksum, midstream_alg
+        )
+
+
+def list_sources(specfile, srcdir, repo_name, distgit_config, *,
+                 url_verify=True, database=None, target=None):
     """List sources with midstream information from dist-git sources file.
 
     Combines spec sources from rpmdev-spectool with midstream checksums
@@ -396,11 +445,11 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True,
     :type repo_name: str
     :param distgit_config: Dist-git instance configuration
     :type distgit_config: dict
-    :param url_verify: Whether to validate URL accessibility
+    :param url_verify: Whether to validate URL accessibility (keyword-only)
     :type url_verify: bool
-    :param database: Optional path to JSON file with RPM macro overrides
+    :param database: Optional path to JSON file with RPM macro overrides (keyword-only)
     :type database: str or None
-    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10')
+    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10') (keyword-only)
     :type target: str or None
     :returns: List of source dictionaries with midstream property
     :rtype: list
@@ -416,48 +465,13 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, url_verify=True,
     # Parse dist-git sources file for midstream checksums
     midstream_sources = parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify)
 
-    # Add midstream property to each source
+    # Add midstream property to each source and verify checksums
     for src_entry in sources:
         sfn = src_entry["filename"]
         if sfn in midstream_sources:
             src_entry["midstream"] = midstream_sources[sfn]
             logging.debug("Added midstream info for %s: %s", sfn, midstream_sources[sfn])
-
-            # Compare checksums using midstream algorithm
-            if "checksum" in midstream_sources[sfn]:
-                midstream_alg = midstream_sources[sfn].get("alg", "SHA256")
-                midstream_checksum = midstream_sources[sfn]["checksum"]
-
-                # Get local checksum, reusing if algorithm matches
-                local_alg = src_entry.get("alg", "").upper()
-                local_checksum = None
-
-                if local_alg == midstream_alg.upper():
-                    # Reuse already calculated checksum
-                    local_checksum = src_entry.get("checksum")
-                else:
-                    # Need to recalculate with midstream algorithm
-                    fp = os.path.join(srcdir, sfn)
-                    if not os.path.isfile(fp):
-                        logging.error("[IMPORTANT] %s doesn't exist", fp)
-                        continue
-                    try:
-                        # Replace hyphens in algorithm name without underlines,
-                        # for SPDX -> hashlib alg format
-                        alg_name = midstream_alg.replace("_", "").lower()
-                        local_checksum = calc_checksum(fp, alg_name)
-                    except Exception as e:  # pylint: disable=W0718 broad-exception-caught
-                        logging.error(
-                            "[IMPORTANT] Failed to calculate checksum for %s using algorithm %s: %s",
-                            sfn, midstream_alg, e
-                        )
-
-                # Compare checksums if local checksum is available
-                if local_checksum and local_checksum != midstream_checksum:
-                    logging.warning(
-                        "[IMPORTANT] Checksum mismatch for %s: local=%s, midstream=%s (algorithm: %s)",
-                        sfn, local_checksum, midstream_checksum, midstream_alg
-                    )
+            _verify_source_checksum(src_entry, midstream_sources[sfn], srcdir)
 
     return sources
 
@@ -534,8 +548,10 @@ def main():
     validate_url = not options.no_url_verify
 
     sources = list_sources(
-        specfile, src_dir, repo_name, distgit_config, validate_url,
-        options.macro_overrides_file, options.target
+        specfile, src_dir, repo_name, distgit_config,
+        url_verify=validate_url,
+        database=options.macro_overrides_file,
+        target=options.target
     )
     result = {"sources": sources}
     if options.output_file:
