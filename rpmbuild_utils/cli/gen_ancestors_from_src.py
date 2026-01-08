@@ -15,7 +15,6 @@ from argparse import ArgumentParser
 import json
 import logging
 import os
-import subprocess
 import sys
 
 from dist_git_client import _load_config as load_dist_git_config
