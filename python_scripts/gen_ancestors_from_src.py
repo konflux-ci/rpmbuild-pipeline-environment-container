@@ -15,7 +15,6 @@ from argparse import ArgumentParser
 import json
 import logging
 import os
-import subprocess
 import sys
 
 from dist_git_client import _load_config as load_dist_git_config
@@ -25,7 +24,7 @@ from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
     search_specfile,
     parse_spec_source_tags,
 )
-from .sbom_utils import calc_checksum, is_url_accessible, run_command  # pylint: disable=E0402 relative-beyond-top-level
+from .sbom_utils import calc_checksum, is_url_accessible  # pylint: disable=E0402 relative-beyond-top-level
 
 UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
 RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]

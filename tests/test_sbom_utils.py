@@ -312,7 +312,7 @@ class TestRunCommand(unittest.TestCase):
         mock_result.returncode = 0
         mock_run.return_value = mock_result
 
-        result = run_command(["echo", "test"])
+        run_command(["echo", "test"])
 
         mock_run.assert_called_once()
         call_args = mock_run.call_args
