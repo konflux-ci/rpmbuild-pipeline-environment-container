@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple, Any, Optional
@@ -26,8 +27,12 @@ from pulp_utils import (
     PulpHelper,
     setup_logging,
     determine_build_id,
-    upload_artifacts_to_repository,
-    create_session_with_retry
+    initialize_upload_tracking,
+    upload_sboms_and_logs_from_artifacts,
+    upload_rpms_from_artifacts,
+    create_session_with_retry,
+    sanitize_error_message,
+    read_file_with_base64_decode
 )
 
 # ============================================================================
@@ -41,12 +46,46 @@ class DistributionClient:
         """Initialize the distribution client with SSL certificates.
 
         Args:
-            cert: Path to the SSL certificate file
-            key: Path to the SSL private key file
+            cert: Path to the SSL certificate file (may be base64 encoded)
+            key: Path to the SSL private key file (may be base64 encoded)
         """
-        self.cert = cert
-        self.key = key
+        # Read and decode base64 if encoded
+        original_cert, cert_content = read_file_with_base64_decode(cert)
+        original_key, key_content = read_file_with_base64_decode(key)
+
+        # If content was base64 decoded, write to temporary files
+        # Otherwise use original file paths
+        self._temp_files = []
+        if cert_content != original_cert:
+            # Content was decoded, create temp file
+            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.crt') as temp_cert:
+                temp_cert.write(cert_content)
+                self.cert = temp_cert.name
+            self._temp_files.append(self.cert)
+            logging.debug("Decoded base64 certificate, using temporary file: %s", self.cert)
+        else:
+            self.cert = cert
+
+        if key_content != original_key:
+            # Content was decoded, create temp file
+            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.key') as temp_key:
+                temp_key.write(key_content)
+                self.key = temp_key.name
+            self._temp_files.append(self.key)
+            logging.debug("Decoded base64 key, using temporary file: %s", self.key)
+        else:
+            self.key = key
+
         self.session = self._create_session()
+
+    def __del__(self):
+        """Clean up temporary files if they were created."""
+        for temp_file in getattr(self, '_temp_files', []):
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except OSError:
+                pass  # Ignore errors during cleanup
 
     def _create_session(self) -> Session:
         """Create a requests session with retry strategy and connection pooling."""
@@ -111,7 +150,7 @@ class DistributionClient:
             return artifact_name, file_path
         except exceptions.RequestException as e:
             logging.error("Failed to download %s: %s", artifact_name, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise
 
 # ============================================================================
@@ -161,7 +200,25 @@ def load_artifact_metadata(artifact_location: str, distribution_client: Distribu
         # HTTP URL - use distribution client
         logging.info("Loading artifact metadata from URL: %s", artifact_location)
         response = distribution_client.pull_artifact(artifact_location)
-        return response.json()
+
+        # Check response status
+        try:
+            response.raise_for_status()
+        except exceptions.HTTPError as e:
+            logging.error("HTTP error when fetching artifact metadata from %s: %s", artifact_location, e)
+            logging.error("Response status code: %d", response.status_code)
+            logging.error("Response content (first 500 chars): %s", response.text[:500])
+            raise
+
+        # Try to parse JSON with better error handling
+        try:
+            return response.json()
+        except json.JSONDecodeError as e:
+            logging.error("Failed to parse JSON response from %s: %s", artifact_location, e)
+            logging.error("Response status code: %d", response.status_code)
+            logging.error("Response content type: %s", response.headers.get('content-type', 'unknown'))
+            logging.error("Response content (first 1000 chars): %s", response.text[:1000])
+            raise
 
     # Local file path
     logging.info("Loading artifact metadata from local file: %s", artifact_location)
@@ -179,160 +236,8 @@ def load_artifact_metadata(artifact_location: str, distribution_client: Distribu
         raise
 
 # ============================================================================
-# Repository Setup Functions
-# ============================================================================
-
-def setup_repositories_if_needed(args: argparse.Namespace,
-                                artifact_json: Optional[Dict] = None) -> Optional[PulpClient]:
-    """
-    Set up repositories using PulpClient if configuration is provided.
-
-    Args:
-        args: Command line arguments
-        artifact_json: Optional artifact metadata to extract build_id from
-
-    Returns:
-        PulpClient instance if repositories were set up, None otherwise
-    """
-    if not args.config:
-        logging.debug("No Pulp configuration provided, skipping repository setup")
-        return None
-
-    try:
-        # Initialize Pulp client
-        client = PulpClient.create_from_config_file(
-            path=args.config
-        )
-
-        # Determine build_id using consolidated function
-        build_id = determine_build_id(args, artifact_json=artifact_json)
-
-        logging.info("Setting up repositories for pull operations: %s", build_id)
-        repository_helper = PulpHelper(client, None)  # TODO: Add cert_config support to pulp-transfer
-        repository_helper.setup_repositories(build_id)
-        logging.info("Repository setup completed for pull operations")
-
-        return client
-
-    except (ValueError, RuntimeError, requests.RequestException) as e:
-        logging.warning("Failed to setup repositories: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
-        logging.warning("Continuing with distribution-only mode")
-        return None
-
-# ============================================================================
 # Upload Functions
 # ============================================================================
-
-def _determine_build_id(args, pulled_artifacts: Dict[str, Dict]) -> str:
-    """Determine the build ID for repository setup.
-
-    Args:
-        args: Command line arguments
-        pulled_artifacts: Downloaded artifacts to extract build_id from
-
-    Returns:
-        Build ID string
-    """
-    return determine_build_id(args, pulled_artifacts=pulled_artifacts)
-
-def _initialize_upload_tracking(build_id: str, repositories: Dict[str, str]) -> Dict:
-    """Initialize upload tracking structure.
-
-    Args:
-        build_id: Build ID for the upload
-        repositories: Repository information
-
-    Returns:
-        Upload tracking dictionary
-    """
-    return {
-        "build_id": build_id,
-        "repositories": repositories,
-        "uploaded_counts": {
-            "sboms": 0,
-            "logs": 0,
-            "rpms": 0
-        },
-        "upload_errors": []
-    }
-
-def _upload_sboms_and_logs(pulp_client: PulpClient, pulled_artifacts: Dict[str, Dict],
-                          repositories: Dict[str, str], upload_info: Dict) -> None:
-    """Upload SBOM and log files to their respective repositories.
-
-    Args:
-        pulp_client: PulpClient instance for API interactions
-        pulled_artifacts: Downloaded artifacts organized by type
-        repositories: Repository information
-        upload_info: Upload tracking dictionary to update
-    """
-    # Upload SBOMs
-    if pulled_artifacts["sboms"]:
-        logging.info("Uploading %d SBOM files to Pulp", len(pulled_artifacts["sboms"]))
-        upload_count, errors = upload_artifacts_to_repository(
-            pulp_client, pulled_artifacts["sboms"], repositories["sbom_prn"], "SBOM"
-        )
-        upload_info["uploaded_counts"]["sboms"] = upload_count
-        upload_info["upload_errors"].extend(errors)
-
-    # Upload logs
-    if pulled_artifacts["logs"]:
-        logging.info("Uploading %d log files to Pulp", len(pulled_artifacts["logs"]))
-        upload_count, errors = upload_artifacts_to_repository(
-            pulp_client, pulled_artifacts["logs"], repositories["logs_prn"], "log"
-        )
-        upload_info["uploaded_counts"]["logs"] = upload_count
-        upload_info["upload_errors"].extend(errors)
-
-def _upload_rpms_to_repository(pulp_client: PulpClient, pulled_artifacts: Dict[str, Dict],
-                              repositories: Dict[str, str], upload_info: Dict) -> None:
-    """Upload RPM files to the RPM repository.
-
-    Args:
-        pulp_client: PulpClient instance for API interactions
-        pulled_artifacts: Downloaded artifacts organized by type
-        repositories: Repository information
-        upload_info: Upload tracking dictionary to update
-    """
-    if not pulled_artifacts["rpms"]:
-        return
-
-    logging.info("Uploading %d RPM files to Pulp", len(pulled_artifacts["rpms"]))
-
-    # Upload RPMs and get artifact hrefs
-    rpm_artifacts = []
-    rpm_upload_count = 0
-    for artifact_name, artifact_info in pulled_artifacts["rpms"].items():
-        try:
-            logging.debug("Uploading RPM: %s", artifact_name)
-            # Upload the RPM file and get artifact href
-            artifact_href = pulp_client.upload_content(
-                artifact_info["file"],
-                artifact_info["labels"],
-                file_type="RPM",
-                upload_method="rpm",
-                arch=artifact_info["labels"].get("arch", "unknown")
-            )
-            rpm_artifacts.append(artifact_href)
-            rpm_upload_count += 1
-            logging.debug("Successfully uploaded RPM: %s", artifact_name)
-        except (requests.RequestException, ValueError, FileNotFoundError) as e:
-            logging.error("Failed to upload RPM %s: %s", artifact_name, e)
-            logging.error("Traceback: %s", traceback.format_exc())
-            upload_info["upload_errors"].append(f"RPM {artifact_name}: {e}")
-
-    # Add all RPM artifacts to the repository
-    if rpm_artifacts:
-        logging.info("Adding %d RPM artifacts to repository", len(rpm_artifacts))
-        try:
-            add_response = pulp_client.add_content(repositories["rpms_href"], rpm_artifacts)
-            pulp_client.wait_for_finished_task(add_response.json()['task'])
-            upload_info["uploaded_counts"]["rpms"] = rpm_upload_count
-        except (requests.RequestException, ValueError, KeyError) as e:
-            logging.error("Failed to add RPMs to repository: %s", e)
-            logging.error("Traceback: %s", traceback.format_exc())
-            upload_info["upload_errors"].append(f"RPM repository addition: {e}")
 
 def upload_downloaded_files_to_pulp(pulp_client: PulpClient, pulled_artifacts: Dict[str, Dict], args) -> Dict:
     """
@@ -350,15 +255,15 @@ def upload_downloaded_files_to_pulp(pulp_client: PulpClient, pulled_artifacts: D
     helper = PulpHelper(pulp_client, None)  # TODO: Add cert_config support to pulp-transfer
 
     # Determine build ID and setup repositories
-    build_id = _determine_build_id(args, pulled_artifacts)
+    build_id = determine_build_id(args, pulled_artifacts=pulled_artifacts)
     repositories = helper.setup_repositories(build_id)
 
     # Initialize upload tracking
-    upload_info = _initialize_upload_tracking(build_id, repositories)
+    upload_info = initialize_upload_tracking(build_id, repositories)
 
     # Upload different artifact types
-    _upload_sboms_and_logs(pulp_client, pulled_artifacts, repositories, upload_info)
-    _upload_rpms_to_repository(pulp_client, pulled_artifacts, repositories, upload_info)
+    upload_sboms_and_logs_from_artifacts(pulp_client, pulled_artifacts, repositories, upload_info)
+    upload_rpms_from_artifacts(pulp_client, pulled_artifacts, repositories, upload_info)
 
     return upload_info
 
@@ -672,7 +577,7 @@ def _download_artifacts_concurrently(artifacts: Dict[str, Any], distros: Dict[st
             except exceptions.RequestException as e:
                 failed += 1
                 logging.error("Failed to download %s: %s", artifact_name, e)
-                logging.error("Traceback: %s", traceback.format_exc())
+                logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
 
     logging.info("Download completed: %d successful, %d failed", completed, failed)
     return pulled_artifacts, completed, failed
@@ -705,16 +610,23 @@ def main() -> None:
         # Initialize distribution client (always needed for downloading files)
         distribution_client = _initialize_clients(args)
 
+        # Initialize Pulp client if configuration is provided
+        client = None
+        if args.config:
+            client = PulpClient.create_from_config_file(
+                path=args.config
+            )
+
         if not args.artifact_location and (args.namespace and args.build_id):
+            if not client:
+                logging.error("Pulp client required to construct artifact_location from namespace and build_id")
+                sys.exit(1)
             # construct the artifact_location
-            args.artifact_location = (f"{args.config["base_url"]}/api/pulp-content/{args.namespace}"
+            args.artifact_location = (f"{client.config["base_url"]}/api/pulp-content/{args.namespace}"
                                       f"/{args.namespace}-{args.build_id}/artifacts/pulp_results.json")
 
         # Load artifact metadata and validate
         artifact_json, artifacts = _load_and_validate_artifacts(args, distribution_client)
-
-        # Set up repositories if configuration is provided
-        pulp_client = setup_repositories_if_needed(args, artifact_json)
 
         # Process artifacts by type
         distros = artifact_json.get("distributions", {})
@@ -724,8 +636,22 @@ def main() -> None:
             artifacts, distros, distribution_client, args.max_workers
         )
 
+        # Set up repositories if configuration is provided
+        if client:
+            try:
+                build_id = determine_build_id(args, artifact_json=artifact_json)
+                logging.info("Setting up repositories for pull operations: %s", build_id)
+                repository_helper = PulpHelper(client, None)  # TODO: Add cert_config support to pulp-transfer
+                repository_helper.setup_repositories(build_id)
+                logging.info("Repository setup completed for pull operations")
+            except (ValueError, RuntimeError, requests.RequestException) as e:
+                logging.warning("Failed to setup repositories: %s", sanitize_error_message(str(e)))
+                logging.warning("Continuing with distribution-only mode")
+        else:
+            logging.debug("No Pulp configuration provided, skipping repository setup")
+
         # Upload downloaded files to Pulp repositories if client is available
-        upload_info = _handle_pulp_upload(pulp_client, pulled_artifacts, args)
+        upload_info = _handle_pulp_upload(client, pulled_artifacts, args)
 
         # Generate and display transfer report
         _generate_transfer_report(pulled_artifacts, completed, failed, args, upload_info)
@@ -738,8 +664,8 @@ def main() -> None:
         sys.exit(1)
     finally:
         # Ensure pulp client session is properly closed if it was created
-        if 'pulp_client' in locals() and pulp_client:
-            pulp_client.close()
+        if 'client' in locals() and client:
+            client.close()
             logging.debug("PulpClient session closed")
 
 def _parse_arguments() -> argparse.Namespace:
