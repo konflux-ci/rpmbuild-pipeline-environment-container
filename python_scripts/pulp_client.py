@@ -24,7 +24,8 @@ from requests.models import Response
 # Local imports
 from pulp_utils import (
     DEFAULT_TIMEOUT, DEFAULT_TASK_TIMEOUT,
-    create_session_with_retry, validate_file_path
+    create_session_with_retry, validate_file_path,
+    sanitize_error_message, read_file_with_base64_decode
 )
 
 # Optional imports with fallback
@@ -142,8 +143,8 @@ class OAuth2ClientCredentialsAuth(requests.auth.AuthBase):
             self._access_token = token["access_token"]
 
         except requests.RequestException as e:
-            logging.error("Failed to retrieve OAuth2 token: %s", e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Failed to retrieve OAuth2 token: %s", sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise
 
     @property
@@ -265,8 +266,8 @@ class PulpClient:
                     all_results.extend(chunk_data['results'])
 
             except Exception as e:
-                logging.error("Failed to process chunk %d: %s", i, e)
-                logging.error("Traceback: %s", traceback.format_exc())
+                logging.error("Failed to process chunk %d: %s", i, sanitize_error_message(str(e)))
+                logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
                 raise
 
         # Create aggregated response
@@ -291,10 +292,64 @@ class PulpClient:
         """
         Create a Pulp client from a standard configuration file that is
         used by the `pulp` CLI tool.
+
+        Args:
+            path: Path to the config file (default: ~/.config/pulp/cli.toml)
+            domain: Optional domain override
+            namespace: Optional namespace override
+
+        Returns:
+            PulpClient instance
+
+        Raises:
+            FileNotFoundError: If the config file doesn't exist
+            ValueError: If the config file is malformed or missing required sections
         """
         config_path = Path(path or "~/.config/pulp/cli.toml").expanduser()
-        with open(config_path, "rb") as fp:
-            config = tomllib.load(fp)
+
+        # Check if config file exists
+        if not config_path.exists():
+            logging.error("Pulp config file not found: %s", config_path)
+            raise FileNotFoundError(f"Pulp config file not found: {config_path}")
+
+        try:
+            # Read and decode base64 if encoded
+            _, decoded_content = read_file_with_base64_decode(str(config_path))
+            config = tomllib.loads(decoded_content.decode('utf-8'))
+        except OSError as e:
+            # File system errors (FileNotFoundError, PermissionError, etc.)
+            logging.error("Failed to read config file: %s", config_path)
+            logging.error("Error: %s", sanitize_error_message(str(e)))
+            raise FileNotFoundError(f"Pulp config file not found or cannot be read: {config_path}") from e
+        except (ValueError, KeyError) as e:
+            # TOML parsing errors (TOMLDecodeError is a subclass of ValueError in tomllib/tomli)
+            error_msg = str(e)
+            sanitized_error = sanitize_error_message(error_msg)
+            error_type = type(e).__name__
+
+            if "TOMLDecodeError" in error_type or "Expected '='" in error_msg:
+                logging.error("Failed to parse TOML config file: %s", config_path)
+                logging.error("The config file appears to be malformed.")
+                logging.error("Error type: %s", error_type)
+                logging.error("Error message: %s", sanitized_error)
+                logging.error("Please check the TOML syntax in the config file.")
+                logging.error("Common issues:")
+                logging.error("  - Missing '=' after a key in a key/value pair")
+                logging.error("  - Incomplete key-value pairs")
+                logging.error("  - Trailing syntax errors at the end of the file")
+                logging.error("  - Invalid TOML structure")
+                raise ValueError(f"Malformed TOML config file: {sanitized_error}") from e
+
+            logging.error("Failed to load Pulp client from config file: %s", config_path)
+            logging.error("Error type: %s", error_type)
+            logging.error("Error message: %s", sanitized_error)
+            raise ValueError(f"Failed to load config file: {sanitized_error}") from e
+
+        # Validate that config has required 'cli' section
+        if "cli" not in config:
+            logging.error("Config file missing required 'cli' section: %s", config_path)
+            raise ValueError(f"Config file missing required 'cli' section: {config_path}")
+
         return cls(config["cli"], domain, namespace)
 
     @property
@@ -415,13 +470,15 @@ class PulpClient:
         """Check if a response is successful, raise exception if not."""
         if not response.ok:
             logging.error("Failed to %s: %s - %s", operation, response.status_code,
-                         response.text)
+                         sanitize_error_message(response.text))
 
             # Enhanced error logging for server errors
             if response.status_code >= 500:
                 logging.error("Server error details:")
                 logging.error("  Status Code: %s", response.status_code)
-                logging.error("  Headers: %s", dict(response.headers))
+                # Sanitize headers to prevent credential leakage
+                headers_dict = dict(response.headers)
+                logging.error("  Headers: %s", sanitize_error_message(str(headers_dict)))
                 logging.error("  URL: %s", response.url)
                 logging.error("  Request Method: %s",
                              response.request.method if response.request else "Unknown")
@@ -429,12 +486,14 @@ class PulpClient:
                 # Try to parse error details
                 try:
                     error_data = response.json()
-                    logging.error("  Error Data: %s", error_data)
+                    logging.error("  Error Data: %s", sanitize_error_message(str(error_data)))
                 except (ValueError, json.JSONDecodeError):
-                    logging.error("  Raw Response: %s", response.text)
+                    logging.error("  Raw Response: %s", sanitize_error_message(response.text))
 
+            # Sanitize error message in exception
+            sanitized_text = sanitize_error_message(response.text)
             raise requests.RequestException(
-                f"Failed to {operation}: {response.status_code} - {response.text}"
+                f"Failed to {operation}: {response.status_code} - {sanitized_text}"
             )
 
     def check_response(self, response: Response, operation: str = "request") -> None:
@@ -498,12 +557,12 @@ class PulpClient:
             return response.json()["pulp_href"]
 
         except requests.RequestException as e:
-            logging.error("Request failed for %s %s: %s", file_type, file_path, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Request failed for %s %s: %s", file_type, file_path, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise
         except Exception as e:
-            logging.error("Unexpected error uploading %s %s: %s", file_type, file_path, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Unexpected error uploading %s %s: %s", file_type, file_path, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise
 
     def create_file_content(self, repository: str, content_or_path: Union[str, Path],
@@ -610,7 +669,7 @@ class PulpClient:
             response = self._get_task(task)
 
             if not response.ok:
-                logging.error("Error processing task %s: %s", task, response.text)
+                logging.error("Error processing task %s: %s", task, sanitize_error_message(response.text))
                 return response
 
             task_state = response.json().get("state")
@@ -708,9 +767,10 @@ class PulpClient:
             logging.debug("Content response JSON: %s", resp_json)
             content_results = resp_json["results"]
         except Exception as e:
-            logging.error("Failed to get content by build ID: %s", e)
-            logging.error("Response text: %s", resp.text if 'resp' in locals() else "No response")
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Failed to get content by build ID: %s", sanitize_error_message(str(e)))
+            resp_text = resp.text if 'resp' in locals() else "No response"
+            logging.error("Response text: %s", sanitize_error_message(resp_text))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise
 
         if not content_results:
