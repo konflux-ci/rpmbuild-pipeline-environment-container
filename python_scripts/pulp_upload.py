@@ -26,7 +26,8 @@ from pulp_utils import (
     setup_logging,
     validate_file_path,
     RESULTS_JSON_FILENAME,
-    create_labels
+    create_labels,
+    sanitize_error_message
 )
 
 # ============================================================================
@@ -123,9 +124,9 @@ def _serialize_results_to_json(results: Dict[str, Any]) -> str:
         logging.debug("JSON content preview: %s", preview)
         return json_content
     except (TypeError, ValueError) as e:
-        logging.error("Failed to serialize results to JSON: %s", e)
+        logging.error("Failed to serialize results to JSON: %s", sanitize_error_message(str(e)))
         logging.error("Results data: %s", results)
-        logging.error("Traceback: %s", traceback.format_exc())
+        logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
         _diagnose_serialization_error(results)
         raise
 
@@ -137,8 +138,8 @@ def _diagnose_serialization_error(results: Dict[str, Any]) -> None:
             json.dumps(value)
             logging.debug("Key '%s' serializes successfully", key)
         except (TypeError, ValueError) as key_error:
-            logging.error("Key '%s' failed to serialize: %s", key, key_error)
-            logging.error("Key error traceback: %s", traceback.format_exc())
+            logging.error("Key '%s' failed to serialize: %s", key, sanitize_error_message(str(key_error)))
+            logging.error("Key error traceback: %s", sanitize_error_message(traceback.format_exc()))
 
 
 def _upload_and_get_results_url(client: PulpClient, args: argparse.Namespace,
@@ -164,8 +165,8 @@ def _upload_and_get_results_url(client: PulpClient, args: argparse.Namespace,
         return results_json_url
 
     except Exception as e:
-        logging.error("Failed to upload results JSON: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
+        logging.error("Failed to upload results JSON: %s", sanitize_error_message(str(e)))
+        logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
         raise
 
 
@@ -276,8 +277,8 @@ def _handle_artifact_results(client: PulpClient, args: argparse.Namespace,
         logging.info("Artifact results written to %s and %s", image_url_path, image_digest_path)
 
     except ValueError as e:
-        logging.error("Invalid artifact_results format: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
+        logging.error("Invalid artifact_results format: %s", sanitize_error_message(str(e)))
+        logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
 
 
 def _handle_sbom_results_from_json(results: Dict[str, Any], args: argparse.Namespace) -> None:
@@ -321,8 +322,8 @@ def _handle_sbom_results_from_json(results: Dict[str, Any], args: argparse.Names
         logging.info("SBOM results written to %s", args.sbom_results)
 
     except (FileNotFoundError, PermissionError, OSError) as e:
-        logging.error("Failed to write SBOM results: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
+        logging.error("Failed to write SBOM results: %s", sanitize_error_message(str(e)))
+        logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
 
 
 # ============================================================================
@@ -376,8 +377,8 @@ def main() -> None:
             logging.warning("Results JSON URL not available")
 
     except requests.exceptions.RequestException as e:
-        logging.error("Fatal error during execution: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
+        logging.error("Fatal error during execution: %s", sanitize_error_message(str(e)))
+        logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
         sys.exit(1)
     finally:
         # Ensure client session is properly closed
