@@ -160,18 +160,19 @@ def populate_buildroot_components():
     This needs to be called before create_md_file() so that cg_import.json
     contains the buildroot components.
     """
-    for arch in buildroots.keys():
+    for arch in buildroots:
         lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
         if not os.path.exists(lockfile_path):
-            logging.warning(f"Missing buildroot_lock.json for {arch}, buildroot components will be empty")
+            logging.warning("Missing buildroot_lock.json for %s, buildroot components will be empty", arch)
             continue
-        lockfile = json.load(open(lockfile_path, "rt"))
-        for rpm in lockfile['buildroot']['rpms']:
-            component = {k: v for k, v in rpm.items()
-                         if k in ['name', 'version', 'release', 'arch',
-                                  'epoch', 'sigmd5', 'signature']}
-            component["type"] = "rpm"
-            buildroots[arch]['components'].append(component)
+        with open(lockfile_path, "rt") as fo:
+            lockfile = json.load(fo)
+            for rpm in lockfile['buildroot']['rpms']:
+                component = {k: v for k, v in rpm.items()
+                             if k in {'name', 'version', 'release', 'arch',
+                                      'epoch', 'sigmd5', 'signature'}}
+                component["type"] = "rpm"
+                buildroots[arch]['components'].append(component)
 
 
 # create cg_import.json
@@ -210,7 +211,7 @@ def create_md_file(options, extra_metadata=None):
     }
 
     # create buildroot ids
-    for idx, arch in enumerate(buildroots.keys()):
+    for idx, arch in enumerate(buildroots):
         buildroots[arch]['id'] = idx
 
     output = []
@@ -378,7 +379,7 @@ def create_sbom():
     # Note: buildroot components are already populated by populate_buildroot_components()
     # which is called before create_md_file(), so we just need to use them here for SBOM
     for arch, arch_rpms in rpms.items():
-        for rpm in buildroots['arch']['components']:
+        for rpm in buildroots[arch]['components']:
             spdxid = f"SPDXRef-{rpm['arch']}-{rpm['name']}"
             pkg = {
                 "SPDXID": spdxid,
