@@ -160,19 +160,19 @@ def populate_buildroot_components():
     This needs to be called before create_md_file() so that cg_import.json
     contains the buildroot components.
     """
-    for arch in buildroots:
+    for arch, buildroot in buildroots.items():
         lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
         if not os.path.exists(lockfile_path):
             logging.warning("Missing buildroot_lock.json for %s, buildroot components will be empty", arch)
             continue
-        with open(lockfile_path, "rt") as fo:
+        with open(lockfile_path, "rt", encoding="utf-8") as fo:
             lockfile = json.load(fo)
             for rpm in lockfile['buildroot']['rpms']:
                 component = {k: v for k, v in rpm.items()
                              if k in {'name', 'version', 'release', 'arch',
                                       'epoch', 'sigmd5', 'signature'}}
                 component["type"] = "rpm"
-                buildroots[arch]['components'].append(component)
+                buildroot['components'].append(component)
 
 
 # create cg_import.json
