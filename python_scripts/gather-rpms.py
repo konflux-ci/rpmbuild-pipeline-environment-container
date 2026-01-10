@@ -154,6 +154,26 @@ def sha256sum(path: str):
     return checksum.hexdigest()
 
 
+def populate_buildroot_components():
+    """
+    Populate buildroot components from mock's buildroot_lock.json files.
+    This needs to be called before create_md_file() so that cg_import.json
+    contains the buildroot components.
+    """
+    for arch in buildroots.keys():
+        lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
+        if not os.path.exists(lockfile_path):
+            logging.warning(f"Missing buildroot_lock.json for {arch}, buildroot components will be empty")
+            continue
+        lockfile = json.load(open(lockfile_path, "rt"))
+        for rpm in lockfile['buildroot']['rpms']:
+            component = {k: v for k, v in rpm.items()
+                         if k in ['name', 'version', 'release', 'arch',
+                                  'epoch', 'sigmd5', 'signature']}
+            component["type"] = "rpm"
+            buildroots[arch]['components'].append(component)
+
+
 # create cg_import.json
 def create_md_file(options, extra_metadata=None):
     path = os.path.join(STAGING_DIR, srpm)
@@ -355,20 +375,10 @@ def create_sbom():
             })
 
     # Add buildroots
+    # Note: buildroot components are already populated by populate_buildroot_components()
+    # which is called before create_md_file(), so we just need to use them here for SBOM
     for arch, arch_rpms in rpms.items():
-        lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
-        if not os.path.exists(lockfile_path):
-            logging.error(f"Missing buildroot_lock.json for {arch}")
-            continue
-        lockfile = json.load(open(lockfile_path, "rt"))
-        buildroot = lockfile['buildroot']
-        for rpm in buildroot['rpms']:
-            component = {k: v for k, v in rpm.items()
-                         if k in ['name', 'version', 'release', 'arch', 'epoch',
-                                  'sigmd5', 'signature']}
-            component["type"] = "rpm"
-            buildroots[arch]['components'].append(component)
-
+        for rpm in buildroots['arch']['components']:
             spdxid = f"SPDXRef-{rpm['arch']}-{rpm['name']}"
             pkg = {
                 "SPDXID": spdxid,
@@ -382,7 +392,7 @@ def create_sbom():
                     {
                         "referenceCategory": "PACKAGE-MANAGER",
                         "referenceType": "purl",
-                        "referenceLocator": f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-{nevra['release']}?arch={nevra['arch']}",
+                        "referenceLocator": f"pkg:rpm/redhat/{rpm['name']}@{rpm['version']}-{rpm['release']}?arch={rpm['arch']}",
                     }
                 ],
                 "checksums": [
@@ -514,6 +524,8 @@ if __name__ == "__main__":
 
     logging.info("Preparing arch data")
     prepare_arch_data()
+    logging.info("Populating buildroot components")
+    populate_buildroot_components()
     logging.info("Gathering extra metadata")
     extra_metadata = get_metadata()
     logging.info("Creating md file")
