@@ -1,2 +1,6 @@
+deepdiff
+koji
+norpm
 pytest
 pytest-cov
+rpm
