@@ -1,6 +1,7 @@
 .coverage
 __pycache__
 tests/results.json
+test-git-repos/
 test-source-rpms/
 trace
 tests/sbom_merged.json
