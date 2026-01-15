@@ -7,19 +7,25 @@ used across multiple Pulp-related modules to reduce code duplication.
 """
 
 import argparse
+import base64
+import binascii
 import glob
 import hashlib
 import logging
 import os
+import re
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, TYPE_CHECKING
 
 # Third-party imports
 import requests
 from requests.adapters import HTTPAdapter, Retry
+
+if TYPE_CHECKING:
+    from pulp_client import PulpClient
 
 # Optional imports with fallback
 try:
@@ -124,15 +130,97 @@ def get_pulp_content_base_url(cert_config_path: Optional[str] = None) -> str:
             return content_base_url
 
         except Exception as e:
-            logging.error("Failed to read cert config %s: %s", cert_config_path, e)
+            logging.error("Failed to read cert config %s: %s", cert_config_path, sanitize_error_message(str(e)))
             raise ValueError(f"Cannot determine Pulp content base URL: {e}") from e
 
     # No cert config provided
     raise ValueError("cert_config_path is required to determine Pulp content base URL")
 
 # ============================================================================
+# File Utilities
+# ============================================================================
+
+def decode_base64_if_encoded(content: bytes) -> bytes:
+    """
+    Decode base64 content if it's encoded, otherwise return original content.
+
+    This function attempts to decode base64-encoded content. If the content
+    is not base64 encoded, it returns the original content unchanged.
+
+    Args:
+        content: Bytes content that may be base64 encoded
+
+    Returns:
+        Decoded bytes if base64 encoded, otherwise original bytes
+    """
+    try:
+        # Try to decode as base64
+        decoded = base64.b64decode(content, validate=True)
+        # If successful and the decoded content is different, return decoded
+        if decoded != content:
+            return decoded
+        # If decoding didn't change anything, it wasn't base64
+        return content
+    except (binascii.Error, ValueError):
+        # If decoding fails, it's not base64 encoded
+        return content
+
+
+def read_file_with_base64_decode(file_path: str) -> Tuple[bytes, bytes]:
+    """
+    Read a file and decode base64 content if encoded.
+
+    Args:
+        file_path: Path to the file to read
+
+    Returns:
+        Tuple of (original_content, decoded_content)
+    """
+    with open(file_path, "rb") as f:
+        original_content = f.read()
+    decoded_content = decode_base64_if_encoded(original_content)
+    return original_content, decoded_content
+
+# ============================================================================
 # Logging Utilities
 # ============================================================================
+
+def sanitize_error_message(error_msg: str) -> str:
+    """
+    Sanitize error messages to remove sensitive information like passwords or secrets.
+
+    This function should be used whenever logging error messages that might contain
+    sensitive data such as passwords, API keys, tokens, or other credentials.
+
+    Args:
+        error_msg: Original error message that may contain sensitive data
+
+    Returns:
+        Sanitized error message with sensitive information redacted
+    """
+    # List of sensitive field names that should be redacted
+    sensitive_fields = [
+        'password', 'secret', 'token', 'key', 'credential', 'auth',
+        'client_secret', 'client_id', 'api_key', 'access_token',
+        'private_key', 'privatekey', 'cert', 'certificate'
+    ]
+
+    sanitized = error_msg
+    # Try to redact common patterns like key=value or "key": "value"
+    for field in sensitive_fields:
+        # Pattern: field = "value" or field="value" (with optional quotes)
+        # Match values that might be on the same line or next line
+        pattern = rf'\b{field}\s*=\s*["\']?[^"\'\n\r]+["\']?'
+        sanitized = re.sub(pattern, f'{field} = <REDACTED>', sanitized, flags=re.IGNORECASE)
+        # Pattern: "field": "value" or 'field': 'value'
+        pattern = rf'["\']?{field}["\']?\s*:\s*["\']?[^"\'\n\r]+["\']?'
+        sanitized = re.sub(pattern, f'"{field}": "<REDACTED>"', sanitized, flags=re.IGNORECASE)
+        # Pattern: [field] section with values below (for TOML)
+        pattern = rf'\[{field}\][^\]]*'
+        sanitized = re.sub(pattern, f'[{field}] <REDACTED>', sanitized, flags=re.IGNORECASE | re.DOTALL)
+
+    return sanitized
+
 
 class WrappingFormatter(logging.Formatter):
     """
@@ -651,8 +739,8 @@ def _process_single_batch(
             checksums.append(checksum)
             logging.debug("Calculated checksum for %s: %s", os.path.basename(rpm_file), checksum)
         except Exception as e: # pylint: disable=W0718 broad-exception-caught
-            logging.error("Failed to calculate checksum for %s: %s", rpm_file, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Failed to calculate checksum for %s: %s", rpm_file, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             continue
 
     # Lookup RPMs on Pulp
@@ -697,8 +785,8 @@ def _process_single_batch(
         }
 
     except Exception as e: # pylint: disable=W0718 broad-exception-caught
-        logging.error("Batch %d/%d failed: %s", batch_num, total_batches, e)
-        logging.debug("Traceback: %s", traceback.format_exc())
+        logging.error("Batch %d/%d failed: %s", batch_num, total_batches, sanitize_error_message(str(e)))
+        logging.debug("Traceback: %s", sanitize_error_message(traceback.format_exc()))
         return {
             "batch_number": batch_num,
             "missing_rpms": batch,
@@ -743,8 +831,8 @@ def _process_batch_results(future_to_batch: Dict, batches: List[List[str]]) -> \
                 time.sleep(0.1)
 
         except Exception as e: # pylint: disable=W0718 broad-exception-caught
-            logging.error("Batch %d processing failed with exception: %s", batch_num, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Batch %d processing failed with exception: %s", batch_num, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             missing_rpms.extend(batches[batch_num - 1])
             found_artifacts.extend([])
 
@@ -839,6 +927,29 @@ def _upload_logs_sequential(client, logs: List[str],
                   build_id=build_id, labels=labels, arch=arch)
 
 
+def initialize_upload_tracking(build_id: str, repositories: Dict[str, str]) -> Dict:
+    """
+    Initialize upload tracking structure.
+
+    Args:
+        build_id: Build ID for the upload
+        repositories: Repository information
+
+    Returns:
+        Upload tracking dictionary
+    """
+    return {
+        "build_id": build_id,
+        "repositories": repositories,
+        "uploaded_counts": {
+            "sboms": 0,
+            "logs": 0,
+            "rpms": 0
+        },
+        "upload_errors": []
+    }
+
+
 def upload_artifacts_to_repository(client, artifacts: Dict[str, Dict],
                                  repository_prn: str, file_type: str) -> Tuple[int, List[str]]:
     """
@@ -882,11 +993,92 @@ def upload_artifacts_to_repository(client, artifacts: Dict[str, Dict],
             logging.debug("Successfully uploaded %s: %s", file_type, artifact_name)
 
         except (requests.RequestException, ValueError, FileNotFoundError, KeyError) as e:
-            logging.error("Failed to upload %s %s: %s", file_type, artifact_name, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Failed to upload %s %s: %s", file_type, artifact_name, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             errors.append(f"{file_type} {artifact_name}: {e}")
 
     return upload_count, errors
+
+
+def upload_rpms_from_artifacts(client: "PulpClient", pulled_artifacts: Dict[str, Dict],
+                               repositories: Dict[str, str], upload_info: Dict) -> None:
+    """
+    Upload RPM files from pulled artifacts to the RPM repository.
+
+    Args:
+        client: PulpClient instance for API interactions
+        pulled_artifacts: Downloaded artifacts organized by type
+        repositories: Repository information
+        upload_info: Upload tracking dictionary to update
+    """
+    if not pulled_artifacts.get("rpms"):
+        return
+
+    logging.info("Uploading %d RPM files to Pulp", len(pulled_artifacts["rpms"]))
+
+    # Upload RPMs and get artifact hrefs
+    rpm_artifacts = []
+    rpm_upload_count = 0
+    for artifact_name, artifact_info in pulled_artifacts["rpms"].items():
+        try:
+            logging.debug("Uploading RPM: %s", artifact_name)
+            # Upload the RPM file and get artifact href
+            artifact_href = client.upload_content(
+                artifact_info["file"],
+                artifact_info["labels"],
+                file_type="RPM",
+                upload_method="rpm",
+                arch=artifact_info["labels"].get("arch", "unknown")
+            )
+            rpm_artifacts.append(artifact_href)
+            rpm_upload_count += 1
+            logging.debug("Successfully uploaded RPM: %s", artifact_name)
+        except (requests.RequestException, ValueError, FileNotFoundError) as e:
+            logging.error("Failed to upload RPM %s: %s", artifact_name, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
+            upload_info["upload_errors"].append(f"RPM {artifact_name}: {e}")
+
+    # Add all RPM artifacts to the repository
+    if rpm_artifacts:
+        logging.info("Adding %d RPM artifacts to repository", len(rpm_artifacts))
+        try:
+            add_response = client.add_content(repositories["rpms_href"], rpm_artifacts)
+            client.wait_for_finished_task(add_response.json()['task'])
+            upload_info["uploaded_counts"]["rpms"] = rpm_upload_count
+        except (requests.RequestException, ValueError, KeyError) as e:
+            logging.error("Failed to add RPMs to repository: %s", sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
+            upload_info["upload_errors"].append(f"RPM repository addition: {e}")
+
+
+def upload_sboms_and_logs_from_artifacts(client: "PulpClient", pulled_artifacts: Dict[str, Dict],
+                                        repositories: Dict[str, str], upload_info: Dict) -> None:
+    """
+    Upload SBOM and log files from pulled artifacts to their respective repositories.
+
+    Args:
+        client: PulpClient instance for API interactions
+        pulled_artifacts: Downloaded artifacts organized by type
+        repositories: Repository information
+        upload_info: Upload tracking dictionary to update
+    """
+    # Upload SBOMs
+    if pulled_artifacts.get("sboms"):
+        logging.info("Uploading %d SBOM files to Pulp", len(pulled_artifacts["sboms"]))
+        upload_count, errors = upload_artifacts_to_repository(
+            client, pulled_artifacts["sboms"], repositories["sbom_prn"], "SBOM"
+        )
+        upload_info["uploaded_counts"]["sboms"] = upload_count
+        upload_info["upload_errors"].extend(errors)
+
+    # Upload logs
+    if pulled_artifacts.get("logs"):
+        logging.info("Uploading %d log files to Pulp", len(pulled_artifacts["logs"]))
+        upload_count, errors = upload_artifacts_to_repository(
+            client, pulled_artifacts["logs"], repositories["logs_prn"], "log"
+        )
+        upload_info["uploaded_counts"]["logs"] = upload_count
+        upload_info["upload_errors"].extend(errors)
 
 
 def upload_rpms_logs(rpm_path: str, args: argparse.Namespace, client, arch: str,
@@ -1121,8 +1313,8 @@ class PulpHelper:
                               repo_type, distro_response.status_code, distro_response.text)
 
         except (requests.RequestException, ValueError, KeyError, AttributeError) as e:
-            logging.warning("Error getting distribution URL for %s: %s", repo_type, e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.warning("Error getting distribution URL for %s: %s", repo_type, sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
 
         return None
 
@@ -1155,7 +1347,7 @@ class PulpHelper:
             logging.error("Failed to parse JSON response for %s repository %s: %s",
                          repo_type, operation, e)
             logging.error("Response content: %s", response.text[:500])
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise ValueError(f"Invalid JSON response from Pulp API: {e}") from e
 
     def _get_existing_repository(self, methods: Dict[str, Any], full_name: str,
@@ -1194,9 +1386,9 @@ class PulpHelper:
         try:
             task_data = task_response.json()
         except ValueError as e:
-            logging.error("Failed to parse JSON response for distribution task: %s", e)
+            logging.error("Failed to parse JSON response for distribution task: %s", sanitize_error_message(str(e)))
             logging.error("Response content: %s", task_response.text[:500])
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             raise ValueError(f"Invalid JSON response from Pulp API: {e}") from e
 
         if task_data.get("created_resources"):
@@ -1257,8 +1449,8 @@ class PulpHelper:
             logging.debug("Distribution check method not available for %s, will create", repo_type)
             return False  # Create distribution if check method doesn't exist
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning("Error checking for existing distribution: %s", e)
-            logging.error("Traceback: %s", traceback.format_exc())
+            logging.warning("Error checking for existing distribution: %s", sanitize_error_message(str(e)))
+            logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
             return False  # Continue with creation if check fails
 
     def _create_distribution_task(self, build_id: str, repo_type: str,
@@ -1318,8 +1510,8 @@ class PulpHelper:
                         repositories[f"{repo_type}_href"] = href
                     logging.debug("Completed setup for %s repository", repo_type)
                 except Exception as e:
-                    logging.error("Failed to setup %s repository: %s", repo_type, e)
-                    logging.error("Traceback: %s", traceback.format_exc())
+                    logging.error("Failed to setup %s repository: %s", repo_type, sanitize_error_message(str(e)))
+                    logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
                     raise
 
         return repositories
@@ -1383,8 +1575,8 @@ class PulpHelper:
                     }
                     logging.debug("Completed processing architecture: %s", arch)
                 except Exception as e:
-                    logging.error("Failed to process architecture %s: %s", arch, e)
-                    logging.error("Traceback: %s", traceback.format_exc())
+                    logging.error("Failed to process architecture %s: %s", arch, sanitize_error_message(str(e)))
+                    logging.error("Traceback: %s", sanitize_error_message(traceback.format_exc()))
                     raise
 
             logging.info("Processed architectures: %s", ", ".join(processed_archs.keys()))
