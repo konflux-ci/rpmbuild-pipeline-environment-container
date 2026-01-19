@@ -28,7 +28,8 @@ RUN ln -s /usr/local/bin/gather_rpms.py /usr/bin/gather-rpms.py
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/common_utils.py /usr/local/bin/common_utils.py
 ADD python_scripts/gen_ancestors_from_src.py /usr/local/bin/gen_ancestors_from_src.py
-ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
+ADD python_scripts/merge_sboms.py /usr/local/bin/merge_sboms.py
+RUN ln -s merge_sboms.py /usr/local/bin/merge_syft_sbom.py
 ADD python_scripts/rpm_utils.py /usr/local/bin/rpm_utils.py
 ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
 ADD python_scripts/validate_sbom.py /usr/local/bin/validate_sbom.py
