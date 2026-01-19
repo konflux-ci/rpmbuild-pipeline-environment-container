@@ -155,8 +155,14 @@ def _main():
     print(f"Trying to build for {allowed_architectures}")
 
     spec = get_specfile(args.workdir)
-    arches = get_arch_specific_tags(spec, args.macro_overrides_file,
-                                    args.target)
+    # rhel-11 will be branched from fedora-rawhide from start, later from fedora 46 and
+    # when rhel 11 will have created specific macros, we need to update macro_overrides_file and
+    # we can drop rhel-11 exception (ROK-1496)
+    target = args.target
+    if target == 'rhel-11':
+        target = 'fedora-rawhide'
+    arches = get_arch_specific_tags(spec, args.macro_overrides_file, target)
+
     architecture_decision = {
         "deps-x86_64": "linux/amd64",
         "deps-i686": "linux/amd64",
