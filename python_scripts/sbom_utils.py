@@ -51,6 +51,18 @@ def get_rpm_purl(name, version, release, arch, epoch=None):
     return purl
 
 
+def get_rpm_license(rpm_path):
+    """Extract license from RPM header.
+
+    :param rpm_path: Path to RPM file
+    :type rpm_path: str
+    :returns: License string from RPM header
+    :rtype: str
+    """
+    result = run_command(["rpm", "-qp", "--qf", "%{LICENSE}", rpm_path])
+    return result.stdout.strip()
+
+
 def to_spdx_license(rpm_license):
     """Convert RPM license to SPDX license expression using license-fedora2spdx.
 
