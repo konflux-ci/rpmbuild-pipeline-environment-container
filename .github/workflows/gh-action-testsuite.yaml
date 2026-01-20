@@ -18,16 +18,13 @@ jobs:
         uses: actions/checkout@v6
 
       - name: install needed RPMs
-        run: dnf install -y python3-norpm python3-pip koji patch git
-
-      - name: patch rpmdiff
-        run: patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < rpmdiff.patch
+        run: dnf install -y python3-norpm python3-pip python3-tox koji patch git gcc krb5-devel
 
       - name: Set up Python
         uses: actions/setup-python@v5
 
-      - name: Install test dependencies
-        run: pip install -r test_requirements.txt
-
+      - name: Prepare test artifacts
+        run: ./prepare_tests.sh
+      
       - name: Run unit tests
-        run: ./run_tests.sh
+        run: tox -e py

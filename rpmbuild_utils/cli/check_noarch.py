@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+"""Check for noarch RPM consistency across architectures."""
 import argparse
 import os
 import sys
@@ -7,6 +8,7 @@ from koji.rpmdiff import Rpmdiff
 
 
 def get_params():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--results-dir', default='/var/workdir/results',
                         help="Path to results directory")

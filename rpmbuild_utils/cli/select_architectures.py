@@ -1,11 +1,12 @@
 #! /usr/bin/python3
+"""Select and configure architectures for RPM builds."""
 
 import argparse
 import json
 import os
 import random
 
-from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
+from rpmbuild_utils.rpm import (
     search_specfile,
     get_arch_specific_tags,
 )
@@ -112,10 +113,10 @@ def _main():
 
     build_architectures = allowed_architectures
     if arches['exclusivearch']:
-        print(f"Limit to ExclusiveArch: {arches["exclusivearch"]}")
+        print(f"Limit to ExclusiveArch: {arches['exclusivearch']}")
         build_architectures &= arches["exclusivearch"]
     if arches['excludearch']:
-        print(f"Avoid ExcludeArch: {arches["excludearch"]}")
+        print(f"Avoid ExcludeArch: {arches['excludearch']}")
         build_architectures -= arches["excludearch"]
     if arches['buildarch'] == set(['noarch']):
         selected_architectures = [random.choice(list(build_architectures))]

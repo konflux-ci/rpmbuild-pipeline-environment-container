@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-from python_scripts.merge_syft_sbom import (
+from rpmbuild_utils.cli.merge_syft_sbom import (
     _main as merge_syft_sbom,
     get_generic_purl,
     attach_sources,

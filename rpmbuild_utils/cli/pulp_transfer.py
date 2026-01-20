@@ -21,8 +21,8 @@ from requests import Session, exceptions, Response
 import requests
 
 # Local imports
-from pulp_client import PulpClient
-from pulp_utils import (
+from rpmbuild_utils.pulp.client import PulpClient
+from rpmbuild_utils.pulp.utils import (
     PulpHelper,
     setup_logging,
     determine_build_id,
@@ -76,7 +76,7 @@ class DistributionClient:
             Full path to the saved file
         """
         logging.info("Pulling file %s", file_url)
-        file_full_filename = f"rpms/{arch}/{filename.split("/")[-1]}"
+        file_full_filename = f"rpms/{arch}/{filename.split('/')[-1]}"
         os.makedirs(os.path.dirname(file_full_filename), exist_ok=True)
 
         response = self.session.get(file_url, stream=True, cert=(self.cert, self.key))
@@ -707,7 +707,7 @@ def main() -> None:
 
         if not args.artifact_location and (args.namespace and args.build_id):
             # construct the artifact_location
-            args.artifact_location = (f"{args.config["base_url"]}/api/pulp-content/{args.namespace}"
+            args.artifact_location = (f"{args.config['base_url']}/api/pulp-content/{args.namespace}"
                                       f"/{args.namespace}-{args.build_id}/artifacts/pulp_results.json")
 
         # Load artifact metadata and validate
