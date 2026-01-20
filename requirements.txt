@@ -1,0 +1,4 @@
+koji
+requests
+norpm
+rpm  # rpm-shim: https://github.com/packit/rpm-shim

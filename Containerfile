@@ -8,7 +8,7 @@ ADD rpmautospec-norpm.patch /
 ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
-    dnf -y install mock koji dist-git-client patch python3-norpm redhat-rpm-config acl rpmautospec jq && \
+    dnf -y install python3-pip mock koji dist-git-client patch python3-norpm redhat-rpm-config acl rpmautospec jq && \
     patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
@@ -19,7 +19,14 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/*.py /usr/bin/
+WORKDIR /src
+
+# Copy package source and install rpmbuild_utils package
+COPY rpmbuild_utils ./rpmbuild_utils
+COPY pyproject.toml .
+
+# Install package with entry points
+RUN pip3 install -e .
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json

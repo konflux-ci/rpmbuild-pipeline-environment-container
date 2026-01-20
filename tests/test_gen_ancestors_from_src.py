@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 # Mock dist_git_client before importing gen_ancestors_from_src
 sys.modules["dist_git_client"] = Mock()
 
-from python_scripts.gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
+from rpmbuild_utils.cli.gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
     calc_checksum,
     calc_sha256_checksum,
     split_archive_filename,

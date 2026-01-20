@@ -11,7 +11,7 @@ import unittest
 
 import pytest
 
-from python_scripts.check_noarch import _main as check_noarch
+from rpmbuild_utils.cli.check_noarch import _main as check_noarch
 
 
 class TestCheckNoarch(unittest.TestCase):
