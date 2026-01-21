@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+"""Gather RPMs and generate SBOM and metadata for Koji."""
 import datetime
 import hashlib
 import itertools
@@ -10,6 +11,7 @@ import subprocess
 from argparse import ArgumentParser
 
 import koji
+from rpmbuild_utils import setup_logging
 
 
 STAGING_DIR = "oras-staging"
@@ -50,17 +52,18 @@ def symlink(src, arch, prepend_arch=False):
     else:
         dst = os.path.join(STAGING_DIR, src)
         src = os.path.join('..', arch, src)
-    logging.debug(f"Symlinking {dst} -> {src}")
+    logging.debug("Symlinking %s -> %s", dst, src)
     os.symlink(src, dst)
 
 
-def handle_archdir(arch):
+def handle_archdir(options, arch):
+    """Process architecture directory to collect RPMs."""
     # need to be global here as local scope is used otherwise
-    global srpm
-    logging.info(f"Handling archdir {arch}")
-    logging.debug(f"Contents of archdir {arch} are {os.listdir(arch)}")
+    global srpm  # pylint: disable=W0603 global-statement
+    logging.info("Handling archdir %s", arch)
+    logging.debug("Contents of archdir %s are %s", arch, os.listdir(arch))
     for filename in os.listdir(arch):
-        logging.debug(f"Handling filename {filename}")
+        logging.debug("Handling filename %s", filename)
         if filename.endswith('.noarch.rpm'):
             if filename not in noarch_rpms:
                 noarch_rpms.append(filename)
@@ -106,14 +109,15 @@ def handle_archdir(arch):
     }
 
 
-def prepare_arch_data():
+def prepare_arch_data(options):
+    """Prepare data from all architecture directories."""
     # we're in results dir, so only archdirs should be present
     for arch in sorted(os.listdir()):
         if not os.path.isdir(arch):
             continue
         if arch == STAGING_DIR:
             continue
-        handle_archdir(arch)
+        handle_archdir(options, arch)
 
 
 def get_metadata():
@@ -129,8 +133,9 @@ def get_metadata():
 
 
 def generate_oras_filelist():
+    """Generate ORAS push file list."""
     # generate oras filelists
-    with open('oras-push-list.txt', 'wt') as f:
+    with open('oras-push-list.txt', 'wt', encoding='utf-8') as f:
         f.write(f'{srpm}:application/x-rpm\n')
         for arch, arch_rpms in rpms.items():
             for rpm in arch_rpms:
@@ -144,6 +149,7 @@ def generate_oras_filelist():
 
 
 def sha256sum(path: str):
+    """Calculate SHA256 checksum of a file."""
     checksum = hashlib.sha256()
     with open(path, "rb") as f:
         while True:
@@ -156,6 +162,7 @@ def sha256sum(path: str):
 
 # create cg_import.json
 def create_md_file(options, extra_metadata=None):
+    """Create Content Generator metadata JSON file."""
     path = os.path.join(STAGING_DIR, srpm)
     nevr = koji.get_header_fields(path, ['name', 'version', 'epoch', 'release'])
     extra = {
@@ -213,8 +220,8 @@ def create_md_file(options, extra_metadata=None):
         })
 
     # arch rpms
-    for arch in rpms:
-        for rpm in rpms[arch]:
+    for arch, arch_rpms in rpms.items():
+        for rpm in arch_rpms:
             path = os.path.join(STAGING_DIR, rpm)
             nevra = koji.get_header_fields(path, ['name', 'version', 'release', 'epoch', 'arch'])
             output.append({
@@ -253,7 +260,8 @@ def create_md_file(options, extra_metadata=None):
         "output": output,
     }
 
-    json.dump(md, open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt'), indent=2)
+    with open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt', encoding='utf-8') as f:
+        json.dump(md, f, indent=2)
 
 
 # from https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/from-koji.py
@@ -266,6 +274,7 @@ license_replacements = {
 
 # from https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/from-koji.py
 def get_license(filename):
+    """Extract and clean license string from RPM."""
     licensep = subprocess.run(
         stdout=subprocess.PIPE,
         check=True,
@@ -277,16 +286,18 @@ def get_license(filename):
             filename,
         ],
     )
-    license = licensep.stdout.decode("utf-8")
-    return clean_license(license)
+    license_str = licensep.stdout.decode("utf-8")
+    return clean_license(license_str)
 
-def clean_license(license):
+def clean_license(license_str):
+    """Normalize license string to SPDX format."""
     for orig, repl in license_replacements.items():
-        license = re.sub(orig, repl, license)
-    return license
+        license_str = re.sub(orig, repl, license_str)
+    return license_str
 
 
 def create_sbom():
+    """Create SPDX SBOM JSON file."""
     # https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/openssl-3.0.7-18.el9_2.spdx.json
     sbom = {
         "spdxVersion": "SPDX-2.3",
@@ -336,7 +347,10 @@ def create_sbom():
                 {
                     "referenceCategory": "PACKAGE-MANAGER",
                     "referenceType": "purl",
-                    "referenceLocator": f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-{nevra['release']}?arch={nevra['arch']}",
+                    "referenceLocator": (
+                        f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-"
+                        f"{nevra['release']}?arch={nevra['arch']}"
+                    ),
                 }
             ],
             "checksums": [
@@ -358,9 +372,10 @@ def create_sbom():
     for arch, arch_rpms in rpms.items():
         lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
         if not os.path.exists(lockfile_path):
-            logging.error(f"Missing buildroot_lock.json for {arch}")
+            logging.error("Missing buildroot_lock.json for %s", arch)
             continue
-        lockfile = json.load(open(lockfile_path, "rt"))
+        with open(lockfile_path, "rt", encoding='utf-8') as f:
+            lockfile = json.load(f)
         buildroot = lockfile['buildroot']
         for rpm in buildroot['rpms']:
             component = {k: v for k, v in rpm.items()
@@ -382,13 +397,18 @@ def create_sbom():
                     {
                         "referenceCategory": "PACKAGE-MANAGER",
                         "referenceType": "purl",
-                        "referenceLocator": f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-{nevra['release']}?arch={nevra['arch']}",
+                        "referenceLocator": (
+                            f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-"
+                            f"{nevra['release']}?arch={nevra['arch']}"
+                        ),
                     }
                 ],
                 "checksums": [
                     {
                         "algorithm": "SHA256",
-                        "checksumValue": sha256sum(os.path.join(arch, "results/buildroot_repo", os.path.basename(rpm['url']))),
+                        "checksumValue": sha256sum(
+                            os.path.join(arch, "results/buildroot_repo", os.path.basename(rpm['url']))
+                        ),
                         #"checksumValue": rpm["sigmd5"],
                         # TODO - we can either pull it from buildroot repo of cachi2
                     }
@@ -419,77 +439,53 @@ def create_sbom():
                     "comment": "Buildroot component"
                 })
 
-    '''
-    # Add sources to packages
-    {
-      "SPDXID": "SPDXRef-Source0-origin",
-      "name": "openssl",
-      "versionInfo": "3.0.7",
-      "downloadLocation": "https://openssl.org/source/openssl-3.0.7.tar.gz",
-      "packageFileName": "openssl-3.0.7.tar.gz",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "83049d042a260e696f62406ac5c08bf706fd84383f945cf21bd61e9ed95c396e"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:generic/openssl@3.0.7?download_url=https://openssl.org/source/openssl-3.0.7.tar.gz&checksum=sha256:83049d042a260e696f62406ac5c08bf706fd84383f945cf21bd61e9ed95c396e"
-        }
-      ]
-    },
-    {
-      "SPDXID": "SPDXRef-Source0",
-      "name": "openssl",
-      "versionInfo": "3.0.7",
-      "downloadLocation": "https://github.com/(RH openssl midstream repo)/archive/refs/tags/3.0.7.tar.gz",
-      "packageFileName": "openssl-3.0.7-hobbled.tar.gz",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "4105046836812ed422922f851a57500118a99cc0f009b7eff2b3436110393377"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:generic/openssl@3.0.7?download_url=https://github.com/(RH openssl midstream repo)/archive/refs/tags/3.0.7.tar.gz&checksum=sha256:4105046836812ed422922f851a57500118a99cc0f009b7eff2b3436110393377"
-        }
-      ]
-    },
-    {
-
-    # Add sources to relationships
-    {
-      "spdxElementId": "SPDXRef-Source0",
-      "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-Source0-origin"
-    },
-    {
-      "spdxElementId": "SPDXRef-SRPM",
-      "relationshipType": "CONTAINS",
-      "relatedSpdxElement": "SPDXRef-Source0"
-    },
-
+    # TODO: Add sources to packages and relationships
+    # Example structure:
+    # {
+    #   "SPDXID": "SPDXRef-Source0-origin",
+    #   "name": "openssl",
+    #   "versionInfo": "3.0.7",
+    #   "downloadLocation": "https://openssl.org/source/openssl-3.0.7.tar.gz",
+    #   "packageFileName": "openssl-3.0.7.tar.gz",
+    #   "checksums": [
+    #     {
+    #       "algorithm": "SHA256",
+    #       "checksumValue": "83049d042a260e696f62406ac5c08bf706fd84383f945cf21bd61e9ed95c396e"
+    #     }
+    #   ],
+    #   "externalRefs": [
+    #     {
+    #       "referenceCategory": "PACKAGE-MANAGER",
+    #       "referenceType": "purl",
+    #       "referenceLocator": "pkg:generic/openssl@3.0.7?download_url=..."
+    #     }
+    #   ]
+    # }
+    #
+    # Relationships:
+    # {
+    #   "spdxElementId": "SPDXRef-Source0",
+    #   "relationshipType": "GENERATED_FROM",
+    #   "relatedSpdxElement": "SPDXRef-Source0-origin"
+    # }
+    #
     # TODO: buildroot contents
-    '''
 
     # in the end we can update documentDescribes
     sbom['documentDescribes'] = rpm_spdxids
-    json.dump(sbom, open(os.path.join(STAGING_DIR, SBOM_JSON), 'wt'), indent=2)
+    with open(os.path.join(STAGING_DIR, SBOM_JSON), 'wt', encoding='utf-8') as f:
+        json.dump(sbom, f, indent=2)
 
 
 def write_nvr():
+    """Write NVR (Name-Version-Release) to file."""
     if srpm:
-        with open(NVR_FILE, "wt") as fo:
-           fo.write(srpm[:-8])
+        with open(NVR_FILE, "wt", encoding='utf-8') as fo:
+            fo.write(srpm[:-8])
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for gather-rpms script."""
     parser = ArgumentParser()
     parser.add_argument("--source-url", action="store", required=True,
                         help="Original url for sources checkout")
@@ -504,16 +500,13 @@ if __name__ == "__main__":
                         help="Debugging output")
     options = parser.parse_args()
 
-    if options.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    setup_logging(options.debug)
 
     if not os.path.exists(STAGING_DIR):
         os.makedirs(STAGING_DIR)
 
     logging.info("Preparing arch data")
-    prepare_arch_data()
+    prepare_arch_data(options)
     logging.info("Gathering extra metadata")
     extra_metadata = get_metadata()
     logging.info("Creating md file")
@@ -523,3 +516,7 @@ if __name__ == "__main__":
     logging.info("Generating oras filelist")
     generate_oras_filelist()
     write_nvr()
+
+
+if __name__ == "__main__":
+    main()

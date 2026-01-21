@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rpmbuild-utils"
+version = "0.1.0"
+description = "RPM build utilities for Konflux pipeline"
+requires-python = ">=3.9"
+
+[project.scripts]
+gather-rpms = "rpmbuild_utils.cli.gather_rpms:main"
+gen-ancestors-from-src = "rpmbuild_utils.cli.gen_ancestors_from_src:main"
+merge-syft-sbom = "rpmbuild_utils.cli.merge_syft_sbom:_main"
+check-noarch = "rpmbuild_utils.cli.check_noarch:_main"
+select-architectures = "rpmbuild_utils.cli.select_architectures:_main"
+pulp-upload = "rpmbuild_utils.cli.pulp_upload:main"
+pulp-transfer = "rpmbuild_utils.cli.pulp_transfer:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rpmbuild_utils*"]

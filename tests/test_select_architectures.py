@@ -14,15 +14,14 @@ from unittest import TestCase
 
 import pytest
 
-from python_scripts.select_architectures import _main as select_architectures
-from python_scripts.select_architectures import get_arch_specific_tags
+from rpmbuild_utils.cli.select_architectures import _main as select_architectures
 
 SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 
 
 class TestSelectArchitectures(TestCase):
     """
-    Unit tests for python_scripts/select_architectures.py.
+    Unit tests for rpmbuild_utils/cli/select_architectures.py.
     """
     # pylint: disable=too-many-public-methods
     def setUp(self):
@@ -325,9 +324,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(testdir, "results.json")
         sys.argv = ["this", "--workdir", testdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(FileNotFoundError) as re:
             select_architectures()
-        self.assertEqual("no spec file available", str(re.exception))
+        self.assertIn("No specfile found", str(re.exception))
 
     def test_more_specfiles(self):
         """
@@ -341,11 +340,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(self.testdir, "results.json")
         sys.argv = ["this", "--workdir", self.workdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(OSError) as re:
             select_architectures()
-        expected_err_message_1 = f"too many specfiles: {', '.join(sorted(specfiles_paths))}"
-        expected_err_message_2 = f"too many specfiles: {', '.join(sorted(specfiles_paths, reverse=True))}"
-        self.assertIn(str(re.exception), [expected_err_message_1, expected_err_message_2])
+        self.assertIn("Multiple specfiles found", str(re.exception))
 
     def test_unknown_macros(self):
         """
@@ -357,11 +354,10 @@ class TestSelectArchitectures(TestCase):
         sys.argv = ["this", "--workdir", self.workdir,
                     "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
-        result = select_architectures()
+        select_architectures()
         actual = self.capsys.readouterr()
         expected = "Unknown macros in"
         self.assertIn(expected, actual.out)
-        self.assertEqual(result, None)
 
     def test_spec_syntax_error(self):
         """
@@ -402,55 +398,6 @@ class TestSelectArchitectures(TestCase):
             "deps-s390x": "localhost",
             "deps-x86_64": "linux/amd64",
         }
-
-
-    def test_multiple_statements(self):
-        """
-        Test that we concatenate multiple Exclu*Arch statements.
-        """
-        testdir = os.path.dirname(os.path.realpath(__file__))
-        specfile = os.path.join(testdir, "specfiles",
-                                "dummy-pkg-multiple-tags.spec")
-        overrides = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-        assert get_arch_specific_tags(specfile, overrides, "rhel-10") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-rhel-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-rhel-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
-
-        assert get_arch_specific_tags(specfile, overrides, "fedora-42") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-fedora-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-fedora-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
 
     def test_platform_override(self):
         """

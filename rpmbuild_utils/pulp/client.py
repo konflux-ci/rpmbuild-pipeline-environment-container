@@ -22,7 +22,7 @@ import requests
 from requests.models import Response
 
 # Local imports
-from pulp_utils import (
+from rpmbuild_utils.pulp.utils import (
     DEFAULT_TIMEOUT, DEFAULT_TASK_TIMEOUT,
     create_session_with_retry, validate_file_path
 )
