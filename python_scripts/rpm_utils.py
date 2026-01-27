@@ -15,6 +15,8 @@ from norpm.specfile import specfile_expand, ParserHooks
 from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
 
+from common_utils import run_command
+
 
 def create_macro_registry(macro_overrides=None, database=None, target_distribution=None):
     """Create and configure a norpm macro registry for spec file parsing.
@@ -119,3 +121,15 @@ def parse_spec_source_tags(specfile, srcdir="."):
         logging.error("Failed to parse spec file %s: %s", specfile, err)
         raise
     return hooks.sources
+
+
+def get_rpm_license(rpm_path):
+    """Extract license from RPM header.
+
+    :param rpm_path: Path to RPM file
+    :type rpm_path: str
+    :returns: License string from RPM header
+    :rtype: str
+    """
+    result = run_command(["rpm", "-qp", "--qf", "%{LICENSE}", rpm_path])
+    return result.stdout.strip()
