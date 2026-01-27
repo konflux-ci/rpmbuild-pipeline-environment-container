@@ -19,6 +19,10 @@ import koji
 from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl, calc_checksum, get_rpm_license
 
 
+SBOM_CREATOR = "Tool: Konflux"
+SBOM_CREATED_TIME = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def get_params():
     """Parse command-line arguments for SBOM merging.
 
@@ -31,9 +35,8 @@ def get_params():
     parser.add_argument('--sbom-merged', required=True, help="Output SPDX SBOM file")
     parser.add_argument('--source-data', help="JSON file with source data from gen_ancestors_from_src.py")
     parser.add_argument(
-        '--mock-lockfile',
-        action='append',
-        help="Path to Mock lockfile for buildroot packages (can be specified multiple times)"
+        '--buildroot-arch-list',
+        help="JSON file with buildroot arch list from gather_rpms (buildroot_rpms.json)"
     )
     parser.add_argument(
         '--syft-sbom-dir',
@@ -55,7 +58,6 @@ def create_base_sbom(rpm_dir):
     :returns: SBOM dictionary
     :rtype: dict
     """
-    current_time = datetime.datetime.now()
     srpm = None
     rpms = []  # List of binary RPM filenames
 
@@ -69,6 +71,7 @@ def create_base_sbom(rpm_dir):
 
     if not srpm:
         raise FileNotFoundError(f"No SRPM found in {rpm_dir}")
+    nvr = srpm[:-8]  # Remove .src.rpm extension
 
     # Initialize SBOM structure
     sbom = {
@@ -76,13 +79,13 @@ def create_base_sbom(rpm_dir):
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
         "creationInfo": {
-            "created": current_time.isoformat(),
+            "created": SBOM_CREATED_TIME,
             "creators": [
-                "Tool: Konflux"
+                SBOM_CREATOR
             ],
         },
-        "name": srpm[:-8],  # Remove .src.rpm extension
-        "documentNamespace": "TODO",
+        "name": nvr,
+        "documentNamespace": f"https://www.redhat.com/{nvr}.spdx.json",
         "packages": [],
         "files": [],
         "relationships": [
@@ -98,38 +101,49 @@ def create_base_sbom(rpm_dir):
     rpm_spdxids = []
     for rpm in [srpm] + rpms:
         path = os.path.join(rpm_dir, rpm)
-        nevra = koji.get_header_fields(path, ['name', 'version', 'release', 'epoch', 'arch'])
+        rpminfo = koji.get_header_fields(
+            path,
+            [
+                "name",
+                "version",
+                "release",
+                "epoch",
+                "arch",
+                "description",
+                "license",
+                "sigmd5",
+                "sha256header",
+            ],
+        )
 
-        if nevra['arch'] == 'src':
+        if rpminfo['arch'] == 'src':
             spdxid = "SPDXRef-SRPM"
         else:
-            spdxid = f"SPDXRef-{nevra['arch']}-{nevra['name']}"
+            spdxid = f"SPDXRef-{rpminfo['arch']}-{rpminfo['name']}"
 
         rpm_spdxids.append(spdxid)
 
         # Get license and convert to SPDX format
-        rpm_license = get_rpm_license(path)
-        spdx_license = to_spdx_license(rpm_license)
+        spdx_license = to_spdx_license(rpminfo['license'])
 
         sbom['packages'].append({
             "SPDXID": spdxid,
-            "name": nevra['name'],
-            "versionInfo": f"{nevra['version']}-{nevra['release']}",
+            "name": rpminfo['name'],
+            "versionInfo": f"{rpminfo['version']}-{rpminfo['release']}",
             "supplier": "Organization: Red Hat",
             "downloadLocation": "NOASSERTION",
             "packageFileName": rpm,
-            "builtDate": datetime.date.today().isoformat(),
-            "licenseConcluded": spdx_license,
+            "licenseDeclared": spdx_license,
             "externalRefs": [
                 {
                     "referenceCategory": "PACKAGE-MANAGER",
                     "referenceType": "purl",
                     "referenceLocator": get_rpm_purl(
-                        name=nevra['name'],
-                        version=nevra['version'],
-                        release=nevra['release'],
-                        arch=nevra['arch'],
-                        epoch=nevra.get('epoch')
+                        name=rpminfo['name'],
+                        version=rpminfo['version'],
+                        release=rpminfo['release'],
+                        arch=rpminfo['arch'],
+                        epoch=rpminfo.get('epoch')
                     ),
                 }
             ],
@@ -142,7 +156,7 @@ def create_base_sbom(rpm_dir):
         })
 
         # All binary RPMs are generated from SRPM
-        if nevra['arch'] != 'src':
+        if rpminfo['arch'] != 'src':
             sbom['relationships'].append({
                 "spdxElementId": spdxid,
                 "relationshipType": "GENERATED_FROM",
@@ -403,13 +417,16 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
         logging.info("Merged RPM SBOM for %s", nvra)
 
 
-def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
+def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):
     """
-    Add buildroot packages from mock lockfiles to SBOM.
+    Add buildroot packages from buildroot arch list to SBOM.
 
-    For each mock lockfile:
-    - Parse the buildroot.rpms list
-    - Extract config.target_arch to identify build environment
+    Reads the buildroot arch list JSON file (output from gather_rpms.py),
+    which maps architectures to their RPM lists and lockfile paths.
+
+    For each architecture:
+    - Read the lockfile path from the arch list
+    - Parse the buildroot.rpms list from the lockfile
     - Create a virtual buildroot package per architecture
     - Create SPDX packages for each buildroot RPM
     - Add CONTAINS relationships from virtual package to buildroot RPMs
@@ -417,75 +434,98 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
 
     :param sbom_root: The root SBOM dictionary to modify
     :type sbom_root: dict
-    :param mock_lockfiles: List of paths to mock lockfile JSON files
-    :type mock_lockfiles: list
+    :param broot_arch_list_file: Path to buildroot arch list JSON file (buildroot_rpms.json)
+    :type broot_arch_list_file: str
     :param srpm_name: Name of the SRPM being built (for virtual package naming)
     :type srpm_name: str
     """
-    if not mock_lockfiles:
+    if not broot_arch_list_file:
         return
 
-    for lockfile_path in mock_lockfiles:
-        with open(lockfile_path, encoding="utf-8") as f:
-            lockfile_data = json.load(f)
+    # Read buildroot arch list JSON
+    with open(broot_arch_list_file, encoding="utf-8") as f:
+        buildroot_arch_list = json.load(f)
 
-        # Extract target architecture from config
-        target_arch = lockfile_data.get("config", {}).get("target_arch")
-        if not target_arch:
-            logging.warning("No target_arch found in lockfile %s, skipping", lockfile_path)
+    # Iterate through each architecture in the buildroot arch list
+    for arch, arch_data in buildroot_arch_list.items():
+        lockfile_path = arch_data.get("lockfile")
+        if not lockfile_path:
+            logging.warning("No lockfile path for arch %s, skipping", arch)
             continue
 
-        # Create virtual buildroot package for this architecture
-        # Calculate a unique version identifier (hash of lockfile path)
-        lockfile_hash = hashlib.sha256(lockfile_path.encode()).hexdigest()[:8]
+        # Read the lockfile
+        try:
+            with open(lockfile_path, encoding="utf-8") as f:
+                lockfile_data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logging.error("Failed to read lockfile %s for arch %s: %s", lockfile_path, arch, e)
+            continue
 
+        # Extract target architecture from config (should match the arch key)
+        target_arch = lockfile_data.get("config", {}).get("target_arch", arch)
+        if target_arch != arch:
+            logging.warning(
+                "Target arch mismatch: arch key=%s, lockfile target_arch=%s, using %s",
+                arch, target_arch, arch
+            )
+            target_arch = arch
+
+        # Create virtual buildroot package for this architecture
         virtual_spdx_id = f"SPDXRef-Buildroot-{srpm_name}-{target_arch}"
-        virtual_pkg = {
+        sbom_root["packages"].append({
             "SPDXID": virtual_spdx_id,
             "name": f"{srpm_name}-buildroot-{target_arch}",
-            "versionInfo": lockfile_hash,
+            # Calculate a unique version identifier (hash of lockfile path)
+            "versionInfo": hashlib.sha256(lockfile_path.encode()).hexdigest()[:8],
             "downloadLocation": "NOASSERTION",
             "filesAnalyzed": False,
-        }
-        sbom_root["packages"].append(virtual_pkg)
+        })
 
         # Get buildroot RPMs
         buildroot_rpms = lockfile_data.get("buildroot", {}).get("rpms", [])
 
         for rpm in buildroot_rpms:
             # Create unique SPDXID using rpm name and arch
-            # Format: SPDXRef-Buildroot-Package-{rpm_name}-{arch}
             spdx_id = f"SPDXRef-Buildroot-Package-{rpm['name']}-{target_arch}"
 
-            # Build version string (version-release)
-            version_str = f"{rpm['version']}-{rpm['release']}"
+            # Build version string (version-release with optional epoch prefix)
+            version = f"{rpm['version']}-{rpm['release']}"
             if rpm.get('epoch'):
-                version_str = f"{rpm['epoch']}:{version_str}"
+                version = f"{rpm['epoch']}:{version}"
 
-            # Convert RPM license to SPDX license expression
-            rpm_license = rpm.get("license")
-            spdx_license = to_spdx_license(rpm_license)
-
-            # Create buildroot package
-            buildroot_pkg = {
+            # Create buildroot package dictionary
+            pkg_dict = {
                 "SPDXID": spdx_id,
                 "name": rpm["name"],
-                "versionInfo": version_str,
+                "versionInfo": version,
                 "downloadLocation": rpm.get("url", "NOASSERTION"),
-                "licenseDeclared": spdx_license,
+                "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
                 "supplier": "Organization: Red Hat",
+                "annotation": []
             }
 
-            # Add checksum if sigmd5 is available
-            if rpm.get("sigmd5"):
-                buildroot_pkg["checksums"] = [{
-                    "algorithm": "MD5",
-                    "checksumValue": rpm["sigmd5"]
-                }]
+            # Add checksum if sigmd5 as an annotation
+            sigmd5 = rpm.get("sigmd5")
+            if sigmd5:
+                pkg_dict["annotation"].append({
+                    "annotationType": "OTHER",
+                    "annotator": SBOM_CREATOR,
+                    "annotationDate": SBOM_CREATED_TIME,
+                    "comment": f"sigmd5: {sigmd5}",
+                })
+            # Add sha256header if sha256header as an annotation (mock doesn't provide it yet)
+            sha256header = rpm.get("sha256header")
+            if sha256header:
+                pkg_dict["annotation"].append({
+                    "annotationType": "OTHER",
+                    "annotator": SBOM_CREATOR,
+                    "annotationDate": SBOM_CREATED_TIME,
+                    "comment": f"sha256header: {sha256header}",
+                })
 
             # Add RPM purl as external reference
-            buildroot_pkg["externalRefs"] = [{
+            pkg_dict["externalRefs"] = [{
                 "referenceCategory": "PACKAGE-MANAGER",
                 "referenceType": "purl",
                 "referenceLocator": get_rpm_purl(
@@ -497,7 +537,7 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
                 )
             }]
 
-            sbom_root["packages"].append(buildroot_pkg)
+            sbom_root["packages"].append(pkg_dict)
 
             # Add CONTAINS relationship from virtual package to buildroot RPM
             sbom_root.setdefault("relationships", []).append({
@@ -509,19 +549,17 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
         # Find binary RPMs built for this architecture
         # and add BUILD_TOOL_OF relationships from virtual package
         for pkg in sbom_root["packages"]:
-            # Check if this is a binary RPM for the target architecture
-            # Look for arch={target_arch} in the purl
+            # Skip packages without external refs or buildroot-related packages
             if not pkg.get("externalRefs"):
                 continue
 
-            purl = pkg["externalRefs"][0].get("referenceLocator", "")
-            # Skip buildroot-related packages (virtual and individual buildroot packages)
-            spdx_id = pkg.get("SPDXID", "")
-            if spdx_id.startswith("SPDXRef-Buildroot-") or spdx_id.startswith("SPDXRef-Buildroot-Package-"):
+            pkg_id = pkg.get("SPDXID", "")
+            if pkg_id.startswith("SPDXRef-Buildroot-"):
                 continue
 
             # Check if this is a binary RPM for the target architecture
-            if f"arch={target_arch}" in purl and "pkg:rpm/" in purl:
+            pkg_purl = pkg["externalRefs"][0].get("referenceLocator", "")
+            if f"arch={target_arch}" in pkg_purl and "pkg:rpm/" in pkg_purl:
                 # Add BUILD_TOOL_OF relationship from virtual buildroot package
                 sbom_root.setdefault("relationships", []).append({
                     "spdxElementId": virtual_spdx_id,
@@ -530,7 +568,9 @@ def attach_buildroot_packages(sbom_root, mock_lockfiles, srpm_name):
                 })
 
 
-def merge_sboms(root_sbom, syft_sbom, output_sbom, *, source_data_file=None, mock_lockfiles=None, syft_sbom_dir=None):
+def merge_sboms(
+        root_sbom, syft_sbom, output_sbom, *,
+        source_data_file=None, broot_arch_list_file=None, syft_sbom_dir=None):
     """Merge SPDX SBOMs from different sources into a single output file.
 
     :param root_sbom: Root SBOM dictionary (from SRPM and binary RPMs)
@@ -541,8 +581,8 @@ def merge_sboms(root_sbom, syft_sbom, output_sbom, *, source_data_file=None, moc
     :type output_sbom: str
     :param source_data_file: Optional path to source data JSON from gen_ancestors_from_src.py
     :type source_data_file: str or None
-    :param mock_lockfiles: Optional list of paths to mock lockfile JSON files
-    :type mock_lockfiles: list or None
+    :param broot_arch_list_file: Optional path to buildroot arch list JSON file (buildroot_rpms.json)
+    :type broot_arch_list_file: str or None
     :param syft_sbom_dir: Optional directory containing syft-scanned SBOM JSON files for the SRPM and Binary RPMs
     :type syft_sbom_dir: str or None
     """
@@ -574,13 +614,13 @@ def merge_sboms(root_sbom, syft_sbom, output_sbom, *, source_data_file=None, moc
     if source_data_file:
         attach_sources(root_sbom, source_data_file)
 
-    # Add buildroot packages if mock lockfiles provided
-    if mock_lockfiles:
+    # Add buildroot packages if buildroot arch list provided
+    if broot_arch_list_file:
         # Extract SRPM name from the root SBOM document name
         # Format is typically: "package-name-version-release"
         # We want just the package name
         srpm_name = root_sbom.get("name", "unknown").split("-")[0]
-        attach_buildroot_packages(root_sbom, mock_lockfiles, srpm_name)
+        attach_buildroot_packages(root_sbom, broot_arch_list_file, srpm_name)
 
     # Add RPM SBOM packages if directory provided
     if syft_sbom_dir:
@@ -601,7 +641,7 @@ def _main():
         args.syft_sbom,
         args.sbom_merged,
         source_data_file=args.source_data,
-        mock_lockfiles=args.mock_lockfile,  # This will be a list or None
+        broot_arch_list_file=args.buildroot_arch_list,
         syft_sbom_dir=args.syft_sbom_dir
     )
 
@@ -610,8 +650,8 @@ def _main():
     print(f"Merged with Syft SBOM: {args.syft_sbom}")
     if args.source_data:
         print(f"  - Added source data from: {args.source_data}")
-    if args.mock_lockfile:
-        print(f"  - Added buildroot packages from {len(args.mock_lockfile)} mock lockfile(s)")
+    if args.buildroot_arch_list:
+        print(f"  - Added buildroot packages from: {args.buildroot_arch_list}")
     if args.syft_sbom_dir:
         print(f"  - Merged RPM SBOMs from: {args.syft_sbom_dir}")
     print(f"Output written to: {args.sbom_merged}")

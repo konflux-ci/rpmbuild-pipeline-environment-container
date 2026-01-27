@@ -274,10 +274,22 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
             json.dump(lockfile_data, f)
-            temp_file = f.name
+            lockfile_path = f.name
+
+        # Create buildroot arch list JSON
+        broot_arch_list_data = {
+            "x86_64": {
+                "filelist": ["gcc-11.3.1-4.el9.x86_64.rpm", "glibc-2.34-60.el9.x86_64.rpm"],
+                "lockfile": lockfile_path
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(broot_arch_list_data, f)
+            broot_arch_list_file = f.name
 
         try:
-            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+            attach_buildroot_packages(sbom_root, broot_arch_list_file, "test-pkg")
 
             # Should have 3 packages: 1 virtual + 2 buildroot
             self.assertEqual(len(sbom_root['packages']), 3)
@@ -318,7 +330,8 @@ class TestAttachBuildrootPackages(unittest.TestCase):
                               ['SPDXRef-Buildroot-Package-gcc-x86_64',
                                'SPDXRef-Buildroot-Package-glibc-x86_64'])
         finally:
-            os.unlink(temp_file)
+            os.unlink(lockfile_path)
+            os.unlink(broot_arch_list_file)
 
     @patch("merge_sboms.to_spdx_license")
     def test_attach_multiple_lockfiles(self, mock_convert_license):
@@ -381,14 +394,30 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f1:
             json.dump(lockfile_x86_64, f1)
-            temp_file1 = f1.name
+            lockfile_path1 = f1.name
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f2:
             json.dump(lockfile_aarch64, f2)
-            temp_file2 = f2.name
+            lockfile_path2 = f2.name
+
+        # Create buildroot arch list JSON with both architectures
+        broot_arch_list_data = {
+            "x86_64": {
+                "filelist": ["gcc-11.3.1-4.el9.x86_64.rpm"],
+                "lockfile": lockfile_path1
+            },
+            "aarch64": {
+                "filelist": ["gcc-11.3.1-4.el9.aarch64.rpm"],
+                "lockfile": lockfile_path2
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(broot_arch_list_data, f)
+            broot_arch_list_file = f.name
 
         try:
-            attach_buildroot_packages(sbom_root, [temp_file1, temp_file2], "test-pkg")
+            attach_buildroot_packages(sbom_root, broot_arch_list_file, "test-pkg")
 
             # Should have 2 original + 2 virtual + 2 buildroot = 6 packages
             self.assertEqual(len(sbom_root['packages']), 6)
@@ -420,8 +449,9 @@ class TestAttachBuildrootPackages(unittest.TestCase):
                          if r['spdxElementId'] == 'SPDXRef-Buildroot-test-pkg-aarch64'][0]
             self.assertEqual(aarch_rel['relatedSpdxElement'], 'SPDXRef-aarch64-test-pkg')
         finally:
-            os.unlink(temp_file1)
-            os.unlink(temp_file2)
+            os.unlink(lockfile_path1)
+            os.unlink(lockfile_path2)
+            os.unlink(broot_arch_list_file)
 
     @patch("merge_sboms.to_spdx_license")
     def test_attach_buildroot_with_epoch(self, mock_convert_license):
@@ -452,10 +482,22 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
             json.dump(lockfile_data, f)
-            temp_file = f.name
+            lockfile_path = f.name
+
+        # Create buildroot arch list JSON
+        broot_arch_list_data = {
+            "x86_64": {
+                "filelist": ["systemd-252-13.el9.x86_64.rpm"],
+                "lockfile": lockfile_path
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(broot_arch_list_data, f)
+            broot_arch_list_file = f.name
 
         try:
-            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+            attach_buildroot_packages(sbom_root, broot_arch_list_file, "test-pkg")
 
             # Find systemd package
             systemd_pkg = [pkg for pkg in sbom_root['packages']
@@ -468,10 +510,15 @@ class TestAttachBuildrootPackages(unittest.TestCase):
             purl = systemd_pkg['externalRefs'][0]['referenceLocator']
             self.assertIn('2:252-13.el9', purl)
         finally:
-            os.unlink(temp_file)
+            os.unlink(lockfile_path)
+            os.unlink(broot_arch_list_file)
 
-    def test_skip_lockfile_without_target_arch(self):
-        """Test that lockfiles without target_arch are skipped."""
+    @patch("rpmbuild_utils.cli.merge_sboms.to_spdx_license")
+    def test_lockfile_without_target_arch(self, mock_convert_license):
+        """Test that lockfiles without target_arch still work (using arch key from buildroot arch list)."""
+        # Mock license conversion to return SPDX format
+        mock_convert_license.side_effect = lambda x: x if x else "NOASSERTION"
+
         sbom_root = {
             "name": "test-pkg-1.1.1-1.el9",
             "packages": [],
@@ -485,23 +532,43 @@ class TestAttachBuildrootPackages(unittest.TestCase):
                     "name": "gcc",
                     "version": "11.3.1",
                     "release": "4.el9",
-                    "arch": "x86_64"
+                    "arch": "x86_64",
+                    "epoch": None,
+                    "license": "GPL-3.0-or-later",
+                    "url": "https://example.com/gcc.rpm",
+                    "sigmd5": "abc123"
                 }]
             }
         }
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
             json.dump(lockfile_data, f)
-            temp_file = f.name
+            lockfile_path = f.name
+
+        # Create buildroot arch list JSON
+        broot_arch_list_data = {
+            "x86_64": {
+                "filelist": ["gcc-11.3.1-4.el9.x86_64.rpm"],
+                "lockfile": lockfile_path
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(broot_arch_list_data, f)
+            broot_arch_list_file = f.name
 
         try:
-            attach_buildroot_packages(sbom_root, [temp_file], "test-pkg")
+            attach_buildroot_packages(sbom_root, broot_arch_list_file, "test-pkg")
 
-            # Should have no packages added
-            self.assertEqual(len(sbom_root['packages']), 0)
-            self.assertEqual(len(sbom_root['relationships']), 0)
+            # Should have packages added (uses arch key from buildroot arch list)
+            self.assertEqual(len(sbom_root['packages']), 2)  # 1 virtual + 1 buildroot
+
+            # Check virtual buildroot package uses x86_64 from JSON key
+            virtual_pkg = sbom_root['packages'][0]
+            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86_64')
         finally:
-            os.unlink(temp_file)
+            os.unlink(lockfile_path)
+            os.unlink(broot_arch_list_file)
 
 
 class TestMergeSboms(unittest.TestCase):
