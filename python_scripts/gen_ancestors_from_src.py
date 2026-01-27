@@ -20,7 +20,7 @@ import sys
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
-from common_utils import calc_checksum, setup_logging
+from common_utils import setup_logging, calc_checksum
 from rpm_utils import (
     search_specfile,
     parse_spec_source_tags,

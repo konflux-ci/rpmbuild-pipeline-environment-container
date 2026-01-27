@@ -513,7 +513,7 @@ class TestAttachBuildrootPackages(unittest.TestCase):
             os.unlink(lockfile_path)
             os.unlink(broot_arch_list_file)
 
-    @patch("rpmbuild_utils.cli.merge_sboms.to_spdx_license")
+    @patch("merge_sboms.to_spdx_license")
     def test_lockfile_without_target_arch(self, mock_convert_license):
         """Test that lockfiles without target_arch still work (using arch key from buildroot arch list)."""
         # Mock license conversion to return SPDX format
