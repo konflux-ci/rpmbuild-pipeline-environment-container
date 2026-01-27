@@ -309,10 +309,10 @@ class TestAttachBuildrootPackages(unittest.TestCase):
             self.assertEqual(gcc_pkg['licenseDeclared'], 'GPL-3.0-or-later')
             self.assertEqual(gcc_pkg['supplier'], 'Organization: Red Hat')
 
-            # Check checksums
-            self.assertEqual(len(gcc_pkg['checksums']), 1)
-            self.assertEqual(gcc_pkg['checksums'][0]['algorithm'], 'MD5')
-            self.assertEqual(gcc_pkg['checksums'][0]['checksumValue'], 'abc123def456')
+            # Check annotations (sigmd5 is stored as annotation)
+            self.assertEqual(len(gcc_pkg['annotations']), 1)
+            self.assertEqual(gcc_pkg['annotations'][0]['annotationType'], 'OTHER')
+            self.assertIn('sigmd5: abc123def456', gcc_pkg['annotations'][0]['comment'])
 
             # Check purl
             self.assertEqual(len(gcc_pkg['externalRefs']), 1)

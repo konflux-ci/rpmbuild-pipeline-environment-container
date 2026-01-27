@@ -418,7 +418,7 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
         logging.info("Merged RPM SBOM for %s", nvra)
 
 
-def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):
+def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # pylint: disable=R0914
     """
     Add buildroot packages from buildroot arch list to SBOM.
 
@@ -503,13 +503,13 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):
                 "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
                 "supplier": "Organization: Red Hat",
-                "annotation": []
+                "annotations": []
             }
 
             # Add checksum if sigmd5 as an annotation
             sigmd5 = rpm.get("sigmd5")
             if sigmd5:
-                pkg_dict["annotation"].append({
+                pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
                     "annotator": SBOM_CREATOR,
                     "annotationDate": SBOM_CREATED_TIME,
@@ -518,7 +518,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):
             # Add sha256header if sha256header as an annotation (mock doesn't provide it yet)
             sha256header = rpm.get("sha256header")
             if sha256header:
-                pkg_dict["annotation"].append({
+                pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
                     "annotator": SBOM_CREATOR,
                     "annotationDate": SBOM_CREATED_TIME,
