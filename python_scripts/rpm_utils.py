@@ -11,6 +11,8 @@ import os
 
 from specfile import Specfile
 
+from common_utils import run_command
+
 
 def search_specfile(src_dir):
     """Search for a specfile in the given source directory.
@@ -58,3 +60,15 @@ def parse_spec_source_tags(specfile):
     except Exception as err:
         logging.error("Failed to parse spec file %s: %s", specfile, err)
         raise
+
+
+def get_rpm_license(rpm_path):
+    """Extract license from RPM header.
+
+    :param rpm_path: Path to RPM file
+    :type rpm_path: str
+    :returns: License string from RPM header
+    :rtype: str
+    """
+    result = run_command(["rpm", "-qp", "--qf", "%{LICENSE}", rpm_path])
+    return result.stdout.strip()

@@ -16,7 +16,8 @@ import os
 
 import koji
 
-from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl, calc_checksum, get_rpm_license
+from common_utils import calc_checksum
+from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl
 
 
 SBOM_CREATOR = "Tool: Konflux"
