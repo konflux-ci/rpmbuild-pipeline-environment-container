@@ -4,6 +4,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -36,6 +37,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -64,6 +66,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -78,6 +81,7 @@
         "value": "%{expand:%{lua:\n  -- test if our arch matches\n  local function arch(archmacro)\n    local target = rpm.expand(\" %{_target_cpu} \")\n    local arches = rpm.expand(\" \" .. archmacro .. \" \")\n    local match = string.match(arches, target)\n    return (match ~= nil)\n  end\n  -- give us the arch...\n  local function getarch()\n    if arch(\"ia64\") then\n      return(\"ia64\")\n    elseif arch(\"x86_64\") then\n      return(\"x64\")\n    elseif arch(\"%{ix86}\") then\n      return(\"ia32\")\n    elseif arch(\"aarch64\") then\n      return(\"aa64\")\n    elseif arch(\"%{arm}\") then\n      return(\"arm\")\n    else\n      return(\"none\")\n    end\n  end\n  -- alt arch\n  local function getaltarch()\n    return(\"none\")\n  end\n  -- make some macros\n  local done = rpm.expand(\"%{?_efi}\")\n  if done == nil or done == \"\" then\n    local arch = getarch()\n    local alt = getaltarch()\n    print(\"%global _efi x86_64 aarch64 armv3l armv4b armv4l armv4tl armv5tl armv5tel armv5tejl armv6l armv6hl armv7l armv7hl armv7hnl armv8l armv8hl armv8hnl armv8hcnl i386 i486 i586 i686 pentium3 pentium4 athlon geode\\n\")\n    print(\"%global _efi_vendor redhat\\n\")\n    if arch == \"none\" then\n      print(\"%global _efi_has_arch 0\\n\")\n    else\n      print(\"%global _efi_has_arch 1\\n\")\n    end\n    print(\"%global _efi_arch \" .. getarch() .. \"\\n\")\n    print(\"%global _efi_arch_upper \" .. string.upper(getarch()) .. \"\\n\")\n    if alt == \"none\" then\n      print(\"%global _efi_has_alt_arch 0\\n\")\n    else\n      print(\"%global _efi_has_alt_arch 1\\n\")\n    end\n    print(\"%global _efi_alt_arch \" .. alt .. \"\\n\")\n    print(\"%global _efi_alt_arch_upper \" .. string.upper(alt) .. \"\\n\")\n  end\n}}"
       },
       "tags": [
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -130,6 +134,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -173,6 +178,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -206,6 +212,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -227,6 +234,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -243,6 +251,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -261,6 +270,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -281,6 +291,7 @@
         "value": "1"
       },
       "tags": [
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -307,6 +318,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -323,6 +335,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -339,6 +352,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -363,6 +377,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-9"
@@ -387,6 +402,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8"
@@ -411,6 +427,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -427,6 +444,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -442,6 +460,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -466,6 +485,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -490,6 +510,7 @@
         "fedora-42",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -514,6 +535,7 @@
         "fedora-42",
         "fedora-43",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -539,6 +561,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -551,6 +574,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -599,6 +623,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -629,6 +654,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -649,6 +675,7 @@
         "value": "x86_64 aarch64 ppc64le s390x mips mipsel mipsr6 mipsr6el mips64 mips64el mips64r6 mips64r6el"
       },
       "tags": [
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -689,6 +716,7 @@
         "value": "x86_64 aarch64 ppc64le s390x"
       },
       "tags": [
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -733,6 +761,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -765,6 +794,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -787,6 +817,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -803,6 +834,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -819,6 +851,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -832,6 +865,7 @@
       "tags": [
         "fedora-41",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -862,6 +896,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -879,6 +914,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -908,6 +944,7 @@
         "value": "x86_64 s390x ppc64le aarch64"
       },
       "tags": [
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -952,6 +989,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -982,6 +1020,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1001,6 +1040,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -1025,6 +1065,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -1049,6 +1090,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-8",
         "rhel-9"
@@ -1072,6 +1114,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1110,6 +1153,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1127,6 +1171,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1174,6 +1219,7 @@
       "tags": [
         "fedora-41",
         "fedora-42",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1224,6 +1270,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1257,6 +1304,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1269,6 +1317,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8"
@@ -1306,6 +1355,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1335,6 +1385,7 @@
         "value": "10"
       },
       "tags": [
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1388,6 +1439,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1412,6 +1464,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1436,6 +1489,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1460,6 +1514,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1483,6 +1538,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-9"
       ]
@@ -1516,6 +1572,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1531,6 +1588,7 @@
         "fedora-42",
         "fedora-43",
         "fedora-rawhide",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1556,6 +1614,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1572,6 +1631,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1588,6 +1648,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1604,6 +1665,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1620,6 +1682,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1636,6 +1699,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1652,6 +1716,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1668,6 +1733,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1684,6 +1750,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1700,6 +1767,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1716,6 +1784,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
@@ -1735,6 +1804,7 @@
         "fedora-43",
         "fedora-rawhide",
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10"
       ]
     },
@@ -1752,6 +1822,7 @@
       "definition": null,
       "tags": [
         "opensuse-tumbleweed",
+        "rhel-11",
         "rhel-10",
         "rhel-7",
         "rhel-8",
