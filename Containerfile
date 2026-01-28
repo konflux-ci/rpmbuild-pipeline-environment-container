@@ -28,6 +28,8 @@ COPY pyproject.toml .
 # Install package with entry points
 RUN pip3 install -e .
 
+WORKDIR /
+
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
