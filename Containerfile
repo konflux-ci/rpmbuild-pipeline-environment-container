@@ -41,4 +41,6 @@ RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro
 # Assert utility versions
 RUN test "$(rpm --eval '%[ v"'"$(rpm -q --qf '%{VERSION}\n' mock)"'" >= v"6.4" ]')" = "1"
 
+ADD resolv.conf /etc/resolv.conf
+
 RUN grep sys.exit /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
