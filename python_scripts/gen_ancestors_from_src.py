@@ -288,7 +288,7 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
     return sources_map
 
 
-def list_spec_sources(specfile, srcdir=".", url_verify=True, database=None, target=None):
+def list_spec_sources(specfile, srcdir=".", url_verify=True, database=None, target_dist=None):
     """List sources from specfile using python-norpm.
 
     :param specfile: Path to the specfile
@@ -299,15 +299,15 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True, database=None, targ
     :type url_verify: bool
     :param database: Optional path to JSON file with RPM macro overrides
     :type database: str or None
-    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10')
-    :type target: str or None
+    :param target_dist: Optional target distribution (e.g., 'fedora-rawhide', 'rhel-10')
+    :type target_dist: str or None
     :returns: List of source dictionaries
     :rtype: list
     """
     sources = []
 
     # Parse spec file to get Source tags
-    source_tags = parse_spec_source_tags(specfile, srcdir, database, target)
+    source_tags = parse_spec_source_tags(specfile, srcdir, database, target_dist)
 
     # Process captured sources
     for source_num, loc in source_tags.items():
@@ -431,7 +431,7 @@ def _verify_source_checksum(src_entry, midstream_info, srcdir):
 
 
 def list_sources(specfile, srcdir, repo_name, distgit_config, *,
-                 url_verify=True, database=None, target=None):
+                 url_verify=True, database=None, target_dist=None):
     """List sources with midstream information from dist-git sources file.
 
     Combines spec sources from rpmdev-spectool with midstream checksums
@@ -449,13 +449,13 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, *,
     :type url_verify: bool
     :param database: Optional path to JSON file with RPM macro overrides (keyword-only)
     :type database: str or None
-    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10') (keyword-only)
-    :type target: str or None
+    :param target_dist: Optional targetdistribution (e.g., 'fedora-rawhide', 'rhel-10') (keyword-only)
+    :type target_dist: str or None
     :returns: List of source dictionaries with midstream property
     :rtype: list
     """
     # Get sources from specfile
-    sources = list_spec_sources(specfile, srcdir, url_verify, database, target)
+    sources = list_spec_sources(specfile, srcdir, url_verify, database, target_dist)
 
     # Get sources file path from dist-git config
     sources_file_template = distgit_config.get("sources_file", "sources")
@@ -511,7 +511,7 @@ def main():
         help="JSON file with RPM macro overrides",
     )
     parser.add_argument(
-        "--target",
+        "--target-distribution",
         default="fedora-rawhide",
         help=("Select the distribution version we build for, e.g., 'rhel-10'. "
               "The default is 'fedora-rawhide'. This option affects how "
@@ -551,7 +551,7 @@ def main():
         specfile, src_dir, repo_name, distgit_config,
         url_verify=validate_url,
         database=options.macro_overrides_file,
-        target=options.target
+        target_dist=options.target_distribution,
     )
     result = {"sources": sources}
     if options.output_file:
