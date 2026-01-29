@@ -95,7 +95,7 @@ def get_params():
                         default="/etc/arch-specific-macro-overrides.json",
                         help="JSON file with RPM macro overrides")
     parser.add_argument(
-        "--target", default="fedora-rawhide",
+        "--target-distribution", default="fedora-rawhide",
         help=("Select the distribution version we build for, e.g., 'rhel-10'. "
               "The default is 'fedora-rawhide'.  This option affects how "
               "some macros in given specfile are expanded, transitively "
@@ -118,14 +118,14 @@ class TagHooks(ParserHooks):
         self.tags[name].update(value.split())
 
 
-def get_arch_specific_tags(specfile, database, target):
+def get_arch_specific_tags(specfile, database, target_distribution):
     """
-    Parse given specfile (against macros from TARGET) and read ExclusiveArch,
+    Parse given specfile (against macros from TARGET_DISTRIBUTION) and read ExclusiveArch,
     ExcludeArch and BuildArch statements.  Return a dictionary with
     `<tagname>: set()` where tagname is .tolower().
     """
     registry = system_macro_registry()
-    registry = override_macro_registry(registry, database, target)
+    registry = override_macro_registry(registry, database, target_distribution)
     # %dist contains %lua mess, it's safer to clear it (we don't need it)
     registry["dist"] = ""
     # norpm maintains a few useful tricks to ease the spec file parsing
@@ -156,7 +156,7 @@ def _main():
 
     spec = get_specfile(args.workdir)
     arches = get_arch_specific_tags(spec, args.macro_overrides_file,
-                                    args.target)
+                                    args.target_distribution)
     architecture_decision = {
         "deps-x86_64": "linux/amd64",
         "deps-i686": "linux/amd64",
