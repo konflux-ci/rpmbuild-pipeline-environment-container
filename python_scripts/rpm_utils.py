@@ -117,7 +117,7 @@ class TagHooks(ParserHooks):
         self.tags[name].update(value.split())
 
 
-def get_arch_specific_tags(specfile, database, target):
+def get_arch_specific_tags(specfile, database, target_distribution):
     """Parse specfile and read architecture-specific tags.
 
     Parse given specfile (against macros from TARGET_DISTRIBUTION) and read ExclusiveArch,
@@ -139,7 +139,7 @@ def get_arch_specific_tags(specfile, database, target):
         macro_overrides={
             "dist": ""
         },
-        database=database, target=target)
+        database=database, target_distribution=target_distribution)
     tags = TagHooks()
     try:
         with open(specfile, "r", encoding="utf8") as fd:
@@ -182,7 +182,7 @@ class SourceHooks(ParserHooks):
             self.sources[source_num] = value
 
 
-def parse_spec_source_tags(specfile, srcdir=".", database=None, target=None):
+def parse_spec_source_tags(specfile, srcdir=".", database=None, target_distribution=None):
     """Parse Source tags from specfile using SourceHooks.
 
     :param specfile: Path to the specfile
@@ -191,8 +191,8 @@ def parse_spec_source_tags(specfile, srcdir=".", database=None, target=None):
     :type srcdir: str
     :param database: Optional path to JSON file with RPM macro overrides
     :type database: str or None
-    :param target: Optional distribution target (e.g., 'fedora-rawhide', 'rhel-10')
-    :type target: str or None
+    :param target_distribution: Optional target distribution (e.g., 'fedora-rawhide', 'rhel-10')
+    :type target_distribution: str or None
     :returns: Dictionary mapping source number to location (e.g., {"0": "https://...", "1": "patch.tar.gz"})
     :rtype: dict
     """
@@ -200,7 +200,7 @@ def parse_spec_source_tags(specfile, srcdir=".", database=None, target=None):
     registry = create_macro_registry(
         macro_overrides={"_sourcedir": srcdir},
         database=database,
-        target=target
+        target_distribution=target_distribution,
     )
 
     # Parse spec file with SourceHooks

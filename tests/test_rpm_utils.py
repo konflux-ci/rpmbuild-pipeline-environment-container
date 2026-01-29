@@ -48,7 +48,8 @@ class TestCreateMacroRegistry(unittest.TestCase):
         overrides_file = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
 
         if os.path.exists(overrides_file):
-            registry = create_macro_registry(database=overrides_file, target="rhel-10")
+            registry = create_macro_registry(
+                database=overrides_file, target_distribution="rhel-10")
             self.assertIsNotNone(registry)
             # Registry should have target-specific macros applied
 
@@ -63,7 +64,7 @@ class TestCreateMacroRegistry(unittest.TestCase):
             registry = create_macro_registry(
                 macro_overrides=macro_overrides,
                 database=overrides_file,
-                target="fedora-rawhide"
+                target_distribution="fedora-rawhide"
             )
             self.assertIsNotNone(registry)
             self.assertEqual(registry["_sourcedir"].value, "/tmp/sources")
@@ -338,7 +339,7 @@ Test package
                 source_tags = parse_spec_source_tags(
                     spec_path, tmpdir,
                     database=overrides_file,
-                    target="fedora-rawhide"
+                    target_distribution="fedora-rawhide"
                 )
                 self.assertGreaterEqual(len(source_tags), 0)
 
