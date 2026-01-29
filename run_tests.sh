@@ -38,9 +38,27 @@ download_files test-source-rpms \
                 broken-noarch-subpackage/aarch64/test-noarch-check-1-1.fc42.aarch64.rpm \
                 broken-noarch-subpackage/aarch64/test-noarch-check-noarch-1-1.fc42.noarch.rpm \
                 broken-noarch-subpackage/x86_64/test-noarch-check-1-1.fc42.x86_64.rpm \
-                broken-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm
+                broken-noarch-subpackage/x86_64/test-noarch-check-noarch-1-1.fc42.noarch.rpm \
+                gather-rpms.tar.gz
 
 download_files test-git-repos git-repos/rpmbuild-pipeline-git.tar.gz
+
+pushd test-source-rpms
+if [[ ! -d gather-rpms ]] ; then
+    # assume that if directory exists, it contains what is needed
+    tar -xf gather-rpms.tar.gz
+    # Generate full buildroot repos
+    for arch in x86_64 i686 ; do
+        if [[ ! -d "gather-rpms/$arch/results/buildroot_repo" ]] ; then
+            mock-hermetic-repo \
+                --lockfile gather-rpms/$arch/results/buildroot_lock.json \
+                --output-repo gather-rpms/$arch/results/buildroot_repo
+    fi
+done
+
+fi
+popd
+
 
 coverage=( --cov-report term-missing --cov python_scripts )
 for arg; do
