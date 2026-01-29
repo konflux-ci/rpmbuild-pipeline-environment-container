@@ -389,7 +389,7 @@ class TestSelectArchitectures(TestCase):
         Check that %rhel is defined if we override.  ROK-1036
         """
         results = self._run_selected_architectures("dummy-pkg-for-rhel.spec",
-                                                   ["--hermetic", "--target", "rhel-10"])
+                                                   ["--hermetic", "--target-distribution", "rhel-10"])
         assert results == {
             "build-aarch64": "linux/arm64",
             "build-i686": "localhost",
