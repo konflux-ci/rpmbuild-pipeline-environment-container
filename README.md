@@ -11,3 +11,18 @@ Use of this image outside the RPM Build pipeline is not supported.  For
 documentation, please refer to the [pipeline][].
 
 [pipeline]: https://github.com/konflux-ci/rpmbuild-pipeline
+
+# How to run the scripts:
+
+* Development (local):
+
+```
+python3 -m python_scripts.bin.select_architectures --help
+```
+
+* Production (in container):
+
+```
+select_architectures.py --help  # Scripts installed to /usr/local/bin/
+```
+

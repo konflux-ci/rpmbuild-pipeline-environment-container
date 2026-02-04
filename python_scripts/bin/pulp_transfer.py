@@ -22,16 +22,15 @@ from requests import Session, exceptions, Response
 import requests
 
 # Local imports
-from pulp_client import PulpClient
-from pulp_utils import (
+from python_scripts.lib import sanitize_error_message, setup_logging
+from python_scripts.lib.pulp.client import PulpClient
+from python_scripts.lib.pulp.utils import (
     PulpHelper,
-    setup_logging,
     determine_build_id,
     initialize_upload_tracking,
     upload_sboms_and_logs_from_artifacts,
     upload_rpms_from_artifacts,
     create_session_with_retry,
-    sanitize_error_message,
     read_file_with_base64_decode
 )
 
@@ -115,7 +114,7 @@ class DistributionClient:
             Full path to the saved file
         """
         logging.info("Pulling file %s", file_url)
-        file_full_filename = f"rpms/{arch}/{filename.split("/")[-1]}"
+        file_full_filename = f"rpms/{arch}/{filename.split('/')[-1]}"
         os.makedirs(os.path.dirname(file_full_filename), exist_ok=True)
 
         response = self.session.get(file_url, stream=True, cert=(self.cert, self.key))
@@ -622,7 +621,7 @@ def main() -> None:
                 logging.error("Pulp client required to construct artifact_location from namespace and build_id")
                 sys.exit(1)
             # construct the artifact_location
-            args.artifact_location = (f"{client.config["base_url"]}/api/pulp-content/{args.namespace}"
+            args.artifact_location = (f"{client.config['base_url']}/api/pulp-content/{args.namespace}"
                                       f"/{args.namespace}-{args.build_id}/artifacts/pulp_results.json")
 
         # Load artifact metadata and validate
