@@ -20,14 +20,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 # Local imports
-from pulp_client import PulpClient
-from pulp_utils import (
+from python_scripts.lib import sanitize_error_message, setup_logging
+from python_scripts.lib.pulp.client import PulpClient
+from python_scripts.lib.pulp.utils import (
     PulpHelper,
-    setup_logging,
     validate_file_path,
     RESULTS_JSON_FILENAME,
     create_labels,
-    sanitize_error_message
 )
 
 # ============================================================================
@@ -176,7 +175,7 @@ def _extract_results_url(client: PulpClient, args: argparse.Namespace, task_resp
     logging.debug("Task response for results JSON: %s", task_resp)
 
     distro_name = f"{args.build_id}/artifacts"
-    return f"{client.get_domain()}/{distro_name}/{task_resp["result"]["relative_path"]}"
+    return f"{client.get_domain()}/{distro_name}/{task_resp['result']['relative_path']}"
 
 
 def _handle_artifact_results_if_requested(client: PulpClient, args: argparse.Namespace,

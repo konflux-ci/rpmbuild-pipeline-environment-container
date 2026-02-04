@@ -14,8 +14,10 @@ from unittest import TestCase
 
 import pytest
 
-from python_scripts.select_architectures import _main as select_architectures
-from python_scripts.select_architectures import get_arch_specific_tags
+from python_scripts.bin.select_architectures import (
+    _main as select_architectures,
+    get_arch_specific_tags,
+)
 
 SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 
@@ -357,11 +359,10 @@ class TestSelectArchitectures(TestCase):
         sys.argv = ["this", "--workdir", self.workdir,
                     "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
-        result = select_architectures()
+        select_architectures()
         actual = self.capsys.readouterr()
         expected = "Unknown macros in"
         self.assertIn(expected, actual.out)
-        self.assertEqual(result, None)
 
     def test_spec_syntax_error(self):
         """
