@@ -10,7 +10,7 @@ from norpm.specfile import specfile_expand, ParserHooks
 from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
 
-from .rpm_utils import search_specfile  # pylint: disable=E0402 relative-beyond-top-level
+from rpm_utils import search_specfile
 
 
 WORKDIR = '/var/workdir/source'
