@@ -354,11 +354,10 @@ class TestSelectArchitectures(TestCase):
         sys.argv = ["this", "--workdir", self.workdir,
                     "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
-        result = select_architectures()
+        select_architectures()
         actual = self.capsys.readouterr()
         expected = "Unknown macros in"
         self.assertIn(expected, actual.out)
-        self.assertEqual(result, None)
 
     def test_spec_syntax_error(self):
         """
