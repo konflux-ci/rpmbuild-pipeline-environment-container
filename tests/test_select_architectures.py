@@ -14,7 +14,7 @@ from unittest import TestCase
 
 import pytest
 
-from python_scripts.select_architectures import _main as select_architectures
+from select_architectures import _main as select_architectures
 
 SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 

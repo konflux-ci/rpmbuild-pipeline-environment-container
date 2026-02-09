@@ -8,7 +8,7 @@ import os
 import tempfile
 import unittest
 
-from python_scripts.rpm_utils import (
+from rpm_utils import (
     search_specfile,
     get_arch_specific_tags,
     create_macro_registry,

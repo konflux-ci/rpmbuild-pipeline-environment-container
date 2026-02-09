@@ -5,7 +5,7 @@ import json
 import os
 import random
 
-from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
+from rpm_utils import (
     search_specfile,
     get_arch_specific_tags,
 )

@@ -19,12 +19,14 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/*.py /usr/bin/
+ADD python_scripts/*.py /usr/local/bin/
+# TODO: Temporarily keep it in /usr/bin until we update the reference in rpmbuild-pipeline
+ADD python_scripts/gather-rpms.py /usr/bin
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
-ADD patch-git-prepare.sh /usr/bin
+ADD patch-git-prepare.sh /usr/local/bin
 
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
 RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \

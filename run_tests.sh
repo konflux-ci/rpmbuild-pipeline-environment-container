@@ -51,5 +51,5 @@ for arg; do
 done
 
 abspath=$(readlink -f .)
-export PYTHONPATH="${PYTHONPATH+$PYTHONPATH:}$abspath"
+export PYTHONPATH="${PYTHONPATH+$PYTHONPATH:}$abspath/python_scripts"
 "${PYTHON:-python3}" -m pytest -s tests "${coverage[@]}" "${args[@]}"
