@@ -23,7 +23,7 @@ import urllib.request
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
-from .rpm_utils import (  # pylint: disable=E0402 relative-beyond-top-level
+from rpm_utils import (
     search_specfile,
     parse_spec_source_tags,
 )
