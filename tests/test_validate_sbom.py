@@ -11,7 +11,9 @@ import unittest
 from unittest.mock import patch
 
 from validate_sbom import (
+    calc_checksum,
     is_url_accessible,
+    validate_source_checksums,
     validate_source_urls,
     validate_sbom,
 )
@@ -54,6 +56,169 @@ class TestIsUrlAccessible(unittest.TestCase):
         mock_opener.return_value.open.return_value.__enter__.return_value = mock_response
 
         self.assertFalse(is_url_accessible("https://example.com/notfound"))
+
+
+class TestCalcChecksum(unittest.TestCase):
+    """
+    Unit tests for calc_checksum function.
+    """
+
+    def test_sha256_checksum(self):
+        """Test calculating SHA256 checksum."""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            f.write("test content")
+            temp_file = f.name
+
+        try:
+            checksum = calc_checksum(temp_file, "sha256")
+            # SHA256 of "test content" is known
+            self.assertEqual(len(checksum), 64)  # SHA256 is 64 hex chars
+            self.assertTrue(all(c in '0123456789abcdef' for c in checksum))
+        finally:
+            os.unlink(temp_file)
+
+    def test_different_algorithms(self):
+        """Test different hash algorithms."""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            f.write("test")
+            temp_file = f.name
+
+        try:
+            sha256 = calc_checksum(temp_file, "sha256")
+            sha512 = calc_checksum(temp_file, "sha512")
+            md5 = calc_checksum(temp_file, "md5")
+
+            self.assertEqual(len(sha256), 64)
+            self.assertEqual(len(sha512), 128)
+            self.assertEqual(len(md5), 32)
+        finally:
+            os.unlink(temp_file)
+
+
+class TestValidateSourceChecksums(unittest.TestCase):
+    """
+    Unit tests for validate_source_checksums function.
+    """
+
+    def test_no_source_dir(self):
+        """Test validation when source_dir is None."""
+        sbom_data = {'packages': []}
+        results = validate_source_checksums(sbom_data, None, True)
+
+        self.assertEqual(results['total_sources_with_checksums'], 0)
+        self.assertEqual(results['verified_checksums'], 0)
+
+    def test_checksum_verify_disabled(self):
+        """Test validation when checksum_verify is False."""
+        sbom_data = {'packages': []}
+        results = validate_source_checksums(sbom_data, "/tmp", False)
+
+        self.assertEqual(results['total_sources_with_checksums'], 0)
+
+    def test_source_without_checksums(self):
+        """Test source package without checksums."""
+        sbom_data = {
+            'packages': [
+                {
+                    'SPDXID': 'SPDXRef-Source0',
+                    'name': 'test-source',
+                    'packageFileName': 'test.tar.gz'
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = validate_source_checksums(sbom_data, tmpdir, True)
+            self.assertEqual(results['total_sources_with_checksums'], 0)
+
+    def test_checksum_validation_success(self):
+        """Test successful checksum validation."""
+        # Create a test file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "test.tar.gz")
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            # Calculate actual checksum
+            actual_checksum = calc_checksum(test_file, "sha256")
+
+            sbom_data = {
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'test.tar.gz',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': actual_checksum
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            results = validate_source_checksums(sbom_data, tmpdir, True)
+
+            self.assertEqual(results['total_sources_with_checksums'], 1)
+            self.assertEqual(results['verified_checksums'], 1)
+            self.assertEqual(results['mismatched_checksums'], 0)
+            self.assertEqual(len(results['failed_checksums']), 0)
+
+    def test_checksum_validation_mismatch(self):
+        """Test checksum validation with mismatch."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "test.tar.gz")
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            sbom_data = {
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'test.tar.gz',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': 'wrongchecksum123'
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            results = validate_source_checksums(sbom_data, tmpdir, True)
+
+            self.assertEqual(results['total_sources_with_checksums'], 1)
+            self.assertEqual(results['verified_checksums'], 0)
+            self.assertEqual(results['mismatched_checksums'], 1)
+            self.assertEqual(len(results['failed_checksums']), 1)
+            self.assertEqual(results['failed_checksums'][0]['spdx_id'], 'SPDXRef-Source0')
+
+    def test_missing_file(self):
+        """Test validation when file is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sbom_data = {
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'nonexistent.tar.gz',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': 'abc123'
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            results = validate_source_checksums(sbom_data, tmpdir, True)
+
+            self.assertEqual(results['total_sources_with_checksums'], 1)
+            self.assertEqual(results['missing_files'], 1)
 
 
 class TestValidateSourceUrls(unittest.TestCase):
@@ -275,6 +440,83 @@ class TestValidateSbom(unittest.TestCase):
             self.assertFalse(result)
         finally:
             os.unlink(temp_file)
+
+    def test_checksum_validation_with_source_dir(self):
+        """Test SBOM validation with checksum verification."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a test file
+            test_file = os.path.join(tmpdir, "test.tar.gz")
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            # Calculate checksum
+            checksum = calc_checksum(test_file, "sha256")
+
+            sbom_data = {
+                'spdxVersion': 'SPDX-2.3',
+                'name': 'test-sbom',
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'test.tar.gz',
+                        'downloadLocation': 'NOASSERTION',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': checksum
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(sbom_data, f)
+                sbom_file = f.name
+
+            try:
+                result = validate_sbom(sbom_file, source_dir=tmpdir, checksum_verify=True)
+                self.assertTrue(result)
+            finally:
+                os.unlink(sbom_file)
+
+    def test_checksum_validation_failed(self):
+        """Test SBOM validation with mismatched checksum."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a test file
+            test_file = os.path.join(tmpdir, "test.tar.gz")
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            sbom_data = {
+                'spdxVersion': 'SPDX-2.3',
+                'name': 'test-sbom',
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'test.tar.gz',
+                        'downloadLocation': 'NOASSERTION',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': 'wrongchecksum123'
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(sbom_data, f)
+                sbom_file = f.name
+
+            try:
+                result = validate_sbom(sbom_file, source_dir=tmpdir, checksum_verify=True)
+                self.assertFalse(result)
+            finally:
+                os.unlink(sbom_file)
 
 
 if __name__ == "__main__":
