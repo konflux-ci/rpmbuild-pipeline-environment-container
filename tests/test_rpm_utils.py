@@ -287,7 +287,7 @@ Test package
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            source_tags = parse_spec_source_tags(spec_path)
 
             self.assertEqual(source_tags, {"0": "https://example.com/testpkg-1.0.tar.gz"})
 
@@ -309,7 +309,7 @@ Test package
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            source_tags = parse_spec_source_tags(spec_path)
 
             self.assertEqual(len(source_tags), 3)
             self.assertIn("0", source_tags)
