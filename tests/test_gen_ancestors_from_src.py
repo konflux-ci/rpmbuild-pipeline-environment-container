@@ -9,8 +9,7 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch, Mock
-import urllib.error
+from unittest.mock import Mock
 from urllib.parse import urlparse
 
 # for the OS without dist-git-client
@@ -22,7 +21,6 @@ from gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
     calc_sha256_checksum,
     split_archive_filename,
     parse_name_version,
-    is_url_accessible,
     get_repo_name,
 )
 
@@ -151,72 +149,6 @@ class TestParseNameVersion(unittest.TestCase):
         name, version = parse_name_version("foo-bar-1.2.3-rc1")
         self.assertEqual(name, "foo-bar-1.2.3")
         self.assertEqual(version, "rc1")
-
-
-class TestIsUrlAccessible(unittest.TestCase):
-    """
-    Unit tests for is_url_accessible function.
-    """
-
-    def test_empty_url(self):
-        """Test with empty URL."""
-        result = is_url_accessible("")
-        self.assertFalse(result)
-
-    def test_none_url(self):
-        """Test with None URL."""
-        result = is_url_accessible(None)
-        self.assertFalse(result)
-
-    @patch("urllib.request.build_opener")
-    def test_successful_url(self, mock_opener):
-        """Test with accessible URL."""
-        mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        mock_opener_instance = MagicMock()
-        mock_opener_instance.open.return_value = mock_response
-        mock_opener.return_value = mock_opener_instance
-
-        result = is_url_accessible("https://example.com/file.tar.gz")
-        self.assertTrue(result)
-
-    @patch("urllib.request.build_opener")
-    def test_failed_url(self, mock_opener):
-        """Test with inaccessible URL."""
-        mock_opener_instance = MagicMock()
-        mock_opener_instance.open.side_effect = urllib.error.URLError("Not found")
-        mock_opener.return_value = mock_opener_instance
-
-        result = is_url_accessible("https://example.com/nonexistent.tar.gz")
-        self.assertFalse(result)
-
-    @patch("urllib.request.build_opener")
-    def test_timeout_url(self, mock_opener):
-        """Test URL request timeout."""
-        mock_opener_instance = MagicMock()
-        mock_opener_instance.open.side_effect = TimeoutError("Timeout")
-        mock_opener.return_value = mock_opener_instance
-
-        result = is_url_accessible("https://slow-server.com/file.tar.gz")
-        self.assertFalse(result)
-
-    @patch("urllib.request.build_opener")
-    def test_non_200_status(self, mock_opener):
-        """Test URL with non-200 status code."""
-        mock_response = MagicMock()
-        mock_response.status = 404
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        mock_opener_instance = MagicMock()
-        mock_opener_instance.open.return_value = mock_response
-        mock_opener.return_value = mock_opener_instance
-
-        result = is_url_accessible("https://example.com/notfound.tar.gz")
-        self.assertFalse(result)
 
 
 class TestGetRepoName(unittest.TestCase):
