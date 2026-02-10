@@ -12,10 +12,23 @@ from rpm_utils import (
     search_specfile,
     get_arch_specific_tags,
     create_macro_registry,
-    SourceHooks,
     parse_spec_source_tags,
 )
 
+
+SPEC_TEMPLATE = """
+Name: testpkg
+Version: 2.0
+Release: 1%%{?dist}
+Summary: Test package
+License: MIT
+
+# SourceN section
+%s
+
+%%description
+Test package
+"""
 
 class TestCreateMacroRegistry(unittest.TestCase):
     """
@@ -215,57 +228,6 @@ class TestGetArchSpecificTags(unittest.TestCase):
             }}
 
 
-class TestSourceHooks(unittest.TestCase):
-    """
-    Unit tests for SourceHooks class.
-    """
-
-    def test_source_hooks_initialization(self):
-        """Test SourceHooks initialization."""
-        hooks = SourceHooks("/test/srcdir")
-        self.assertEqual(hooks.srcdir, "/test/srcdir")
-        self.assertEqual(hooks.sources, {})
-
-    def test_tag_found_source0(self):
-        """Test capturing Source0 tag."""
-        hooks = SourceHooks("/test/srcdir")
-        hooks.tag_found("source0", "https://example.com/file.tar.gz", "")
-        self.assertEqual(hooks.sources, {"0": "https://example.com/file.tar.gz"})
-
-    def test_tag_found_source1(self):
-        """Test capturing Source1 tag."""
-        hooks = SourceHooks("/test/srcdir")
-        hooks.tag_found("source1", "patch-1.0.tar.gz", "")
-        self.assertEqual(hooks.sources, {"1": "patch-1.0.tar.gz"})
-
-    def test_tag_found_source_without_number(self):
-        """Test capturing Source tag without number (defaults to 0)."""
-        hooks = SourceHooks("/test/srcdir")
-        hooks.tag_found("source", "https://example.com/archive.zip", "")
-        self.assertEqual(hooks.sources, {"0": "https://example.com/archive.zip"})
-
-    def test_tag_found_multiple_sources(self):
-        """Test capturing multiple Source tags."""
-        hooks = SourceHooks("/test/srcdir")
-        hooks.tag_found("source0", "https://example.com/main.tar.gz", "")
-        hooks.tag_found("source1", "https://example.com/patch1.patch", "")
-        hooks.tag_found("source2", "https://example.com/patch2.patch", "")
-        self.assertEqual(hooks.sources, {
-            "0": "https://example.com/main.tar.gz",
-            "1": "https://example.com/patch1.patch",
-            "2": "https://example.com/patch2.patch",
-        })
-
-    def test_tag_found_ignores_non_source_tags(self):
-        """Test that non-source tags are ignored."""
-        hooks = SourceHooks("/test/srcdir")
-        hooks.tag_found("name", "mypackage", "")
-        hooks.tag_found("version", "1.0", "")
-        hooks.tag_found("source0", "https://example.com/file.tar.gz", "")
-        # Only source0 should be captured
-        self.assertEqual(hooks.sources, {"0": "https://example.com/file.tar.gz"})
-
-
 class TestParseSpecSourceTags(unittest.TestCase):
     """
     Unit tests for parse_spec_source_tags function.
@@ -274,15 +236,7 @@ class TestParseSpecSourceTags(unittest.TestCase):
     def test_parse_simple_spec(self):
         """Test parsing a simple spec file."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            spec_content = """
-Name: testpkg
-Version: 1.0
-
-Source0: https://example.com/testpkg-1.0.tar.gz
-
-%description
-Test package
-"""
+            spec_content = SPEC_TEMPLATE % ("Source0: https://example.com/testpkg-1.0.tar.gz")
             spec_path = os.path.join(tmpdir, "test.spec")
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
@@ -294,17 +248,13 @@ Test package
     def test_parse_multiple_sources(self):
         """Test parsing spec with multiple sources."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            spec_content = """
-Name: testpkg
-Version: 2.0
-
+            spec_content = SPEC_TEMPLATE % (
+                """\
 Source0: https://example.com/testpkg-2.0.tar.gz
 Source1: https://example.com/patch1.patch
 Source2: local-file.txt
-
-%description
-Test package
 """
+            )
             spec_path = os.path.join(tmpdir, "test.spec")
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
@@ -316,32 +266,19 @@ Test package
             self.assertIn("1", source_tags)
             self.assertIn("2", source_tags)
 
-    def test_parse_with_target(self):
-        """Test parsing with target parameter."""
+    def test_parse_basic_specfile(self):
+        """Test parsing a basic specfile."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            spec_content = """
-Name: testpkg
-Version: 1.0
+            spec_content = SPEC_TEMPLATE % (
+                "Source0: https://example.com/testpkg-1.0.tar.gz")
 
-Source0: https://example.com/testpkg-1.0.tar.gz
-
-%description
-Test package
-"""
             spec_path = os.path.join(tmpdir, "test.spec")
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            testdir = os.path.dirname(os.path.realpath(__file__))
-            overrides_file = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-
-            if os.path.exists(overrides_file):
-                source_tags = parse_spec_source_tags(
-                    spec_path, tmpdir,
-                    database=overrides_file,
-                    target_distribution="fedora-rawhide"
-                )
-                self.assertGreaterEqual(len(source_tags), 0)
+            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            self.assertGreaterEqual(len(source_tags), 1)
+            self.assertIn("0", source_tags)
 
 
 if __name__ == "__main__":
