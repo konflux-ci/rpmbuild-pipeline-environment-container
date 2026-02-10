@@ -18,6 +18,8 @@ import os
 import sys
 import urllib.request
 
+from common_utils import setup_logging
+
 
 def calc_checksum(filepath, algorithm="sha256", chunk_size=1024**2):
     """Calculate checksum of a file using specified algorithm.
@@ -339,10 +341,7 @@ def main():
 
     options = parser.parse_args()
 
-    if options.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    setup_logging(options.debug)
 
     validate_url = not options.no_url_verify
     validate_checksum = not options.no_checksum_verify

@@ -22,6 +22,7 @@ import sys
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
+from common_utils import setup_logging
 from rpm_utils import (
     search_specfile,
     parse_spec_source_tags,
@@ -401,10 +402,7 @@ def main():
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
-    if options.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    setup_logging(options.debug)
 
     # Process dist-git-config-dir with environment variable fallback
     dist_git_config_dir = options.dist_git_config_dir
