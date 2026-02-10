@@ -1,0 +1,19 @@
+# This Containerfile is used for development and testing purposes.
+# You can run it with the following command:
+# ```
+#   podman build -t rpmbuild-env:dev -f Containerfile.dev .
+# ```
+# And run it with:
+# ```
+#   podman run -u root --privileged -it -v $(pwd):/workdir --name rpmbuild-dev rpmbuild-env:dev bash
+# ```
+# The base image is the one built from the Containerfile in the same directory
+FROM rpmbuild-env:latest
+
+ARG WORKDIR=/workdir
+
+WORKDIR ${WORKDIR}
+
+RUN \
+    dnf -y install python3-pytest python3-pytest-cov python3-ruff python3-pylint python3-spdx-tools && \
+    dnf -y clean all
