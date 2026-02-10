@@ -155,13 +155,11 @@ def get_arch_specific_tags(specfile, database, target_distribution):
     return arches
 
 
-def parse_spec_source_tags(specfile, srcdir="."):
+def parse_spec_source_tags(specfile):
     """Parse Source tags from specfile using python-specfile.
 
     :param specfile: Path to the specfile
     :type specfile: str
-    :param srcdir: Source directory for resolving filenames (unused with python-specfile)
-    :type srcdir: str
     :returns: Dictionary mapping source number to location (e.g., {"0": "https://...", "1": "patch.tar.gz"})
     :rtype: dict
     """

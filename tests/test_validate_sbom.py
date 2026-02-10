@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from common_utils import calc_checksum
 from validate_sbom import (
-    calc_checksum,
     is_url_accessible,
     validate_source_checksums,
     validate_source_urls,
@@ -56,43 +56,6 @@ class TestIsUrlAccessible(unittest.TestCase):
         mock_opener.return_value.open.return_value.__enter__.return_value = mock_response
 
         self.assertFalse(is_url_accessible("https://example.com/notfound"))
-
-
-class TestCalcChecksum(unittest.TestCase):
-    """
-    Unit tests for calc_checksum function.
-    """
-
-    def test_sha256_checksum(self):
-        """Test calculating SHA256 checksum."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            f.write("test content")
-            temp_file = f.name
-
-        try:
-            checksum = calc_checksum(temp_file, "sha256")
-            # SHA256 of "test content" is known
-            self.assertEqual(len(checksum), 64)  # SHA256 is 64 hex chars
-            self.assertTrue(all(c in '0123456789abcdef' for c in checksum))
-        finally:
-            os.unlink(temp_file)
-
-    def test_different_algorithms(self):
-        """Test different hash algorithms."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            f.write("test")
-            temp_file = f.name
-
-        try:
-            sha256 = calc_checksum(temp_file, "sha256")
-            sha512 = calc_checksum(temp_file, "sha512")
-            md5 = calc_checksum(temp_file, "md5")
-
-            self.assertEqual(len(sha256), 64)
-            self.assertEqual(len(sha512), 128)
-            self.assertEqual(len(md5), 32)
-        finally:
-            os.unlink(temp_file)
 
 
 class TestValidateSourceChecksums(unittest.TestCase):

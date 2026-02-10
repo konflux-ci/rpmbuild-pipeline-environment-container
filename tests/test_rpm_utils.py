@@ -241,7 +241,7 @@ class TestParseSpecSourceTags(unittest.TestCase):
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            source_tags = parse_spec_source_tags(spec_path)
 
             self.assertEqual(source_tags, {"0": "https://example.com/testpkg-1.0.tar.gz"})
 
@@ -259,7 +259,7 @@ Source2: local-file.txt
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            source_tags = parse_spec_source_tags(spec_path)
 
             self.assertEqual(len(source_tags), 3)
             self.assertIn("0", source_tags)
@@ -276,7 +276,7 @@ Source2: local-file.txt
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            source_tags = parse_spec_source_tags(spec_path)
             self.assertGreaterEqual(len(source_tags), 1)
             self.assertIn("0", source_tags)
 

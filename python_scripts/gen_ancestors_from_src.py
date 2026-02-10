@@ -12,7 +12,6 @@ Example usage:
 
 """
 from argparse import ArgumentParser
-import hashlib
 import json
 import logging
 import os
@@ -22,7 +21,7 @@ import sys
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
 
-from common_utils import setup_logging
+from common_utils import calc_checksum, setup_logging
 from rpm_utils import (
     search_specfile,
     parse_spec_source_tags,
@@ -120,41 +119,6 @@ def parse_name_version(basename):
     else:
         sver = parts[-1]
     return sname, sver
-
-
-def calc_checksum(filepath, algorithm="sha256", chunk_size=1024**2):
-    """Calculate checksum of a file using specified algorithm.
-
-    :param filepath: Path to the file
-    :type filepath: str
-    :param algorithm: Hash algorithm (e.g., 'sha256', 'sha512', 'md5')
-    :type algorithm: str
-    :param chunk_size: Size of chunks to read
-    :type chunk_size: int
-    :returns: Hexadecimal checksum string
-    :rtype: str
-    """
-    h = hashlib.new(algorithm.lower())
-    with open(filepath, "rb") as fp:
-        while True:
-            data = fp.read(chunk_size)
-            if not data:
-                break
-            h.update(data)
-    return h.hexdigest()
-
-
-def calc_sha256_checksum(filepath, chunk_size=1024**2):
-    """Calculate SHA-256 checksum of a file.
-
-    :param filepath: Path to the file
-    :type filepath: str
-    :param chunk_size: Size of chunks to read
-    :type chunk_size: int
-    :returns: SHA-256 hexadecimal checksum string
-    :rtype: str
-    """
-    return calc_checksum(filepath, "sha256", chunk_size)
 
 
 def load_distgit_config(srcdir, dist_git_config_dir):
@@ -269,7 +233,7 @@ def list_spec_sources(specfile, srcdir="."):
     sources = []
 
     # Parse spec file to get Source tags
-    source_tags = parse_spec_source_tags(specfile, srcdir)
+    source_tags = parse_spec_source_tags(specfile)
 
     # Process captured sources
     for source_num, loc in source_tags.items():

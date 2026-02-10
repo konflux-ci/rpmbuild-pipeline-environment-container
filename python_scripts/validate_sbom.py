@@ -11,36 +11,13 @@ Example usage:
 """
 
 import argparse
-import hashlib
 import json
 import logging
 import os
 import sys
 import urllib.request
 
-from common_utils import setup_logging
-
-
-def calc_checksum(filepath, algorithm="sha256", chunk_size=1024**2):
-    """Calculate checksum of a file using specified algorithm.
-
-    :param filepath: Path to the file
-    :type filepath: str
-    :param algorithm: Hash algorithm (e.g., 'sha256', 'sha512', 'md5')
-    :type algorithm: str
-    :param chunk_size: Size of chunks to read
-    :type chunk_size: int
-    :returns: Hexadecimal checksum string
-    :rtype: str
-    """
-    h = hashlib.new(algorithm.lower())
-    with open(filepath, "rb") as fp:
-        while True:
-            data = fp.read(chunk_size)
-            if not data:
-                break
-            h.update(data)
-    return h.hexdigest()
+from common_utils import calc_checksum, setup_logging
 
 
 def is_url_accessible(url):
@@ -83,15 +60,17 @@ def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):
     :returns: Dictionary with validation results
     :rtype: dict
     """
+    checksum_verify = checksum_verify and bool(source_dir)
     results = {
         'total_sources_with_checksums': 0,
         'verified_checksums': 0,
         'mismatched_checksums': 0,
         'missing_files': 0,
-        'failed_checksums': []
+        'failed_checksums': [],
+        'checksum_verify': checksum_verify,
     }
 
-    if not checksum_verify or not source_dir:
+    if not checksum_verify:
         return results
 
     packages = sbom_data.get('packages', [])
@@ -165,6 +144,8 @@ def validate_source_urls(sbom_data, url_verify=True):
 
     Extracts URLs from source packages (SPDXRef-Source*) and validates accessibility.
 
+    Notes: Even url_verify is False, this function still counts total sources and sources with URLs for summary.
+
     :param sbom_data: Parsed SBOM JSON data
     :type sbom_data: dict
     :param url_verify: Whether to validate URL accessibility
@@ -177,7 +158,8 @@ def validate_source_urls(sbom_data, url_verify=True):
         'sources_with_urls': 0,
         'accessible_urls': 0,
         'inaccessible_urls': 0,
-        'failed_urls': []
+        'failed_urls': [],
+        'url_verify': url_verify,
     }
 
     packages = sbom_data.get('packages', [])
@@ -210,6 +192,61 @@ def validate_source_urls(sbom_data, url_verify=True):
                         logging.warning("✗ %s is NOT accessible", download_location)
 
     return results
+
+
+def _print_validation_summary(url_results, checksum_results):
+    """Print validation summary with results.
+
+    :param url_results: Dictionary with URL validation results
+    :type url_results: dict
+    :param checksum_results: Dictionary with checksum validation results
+    :type checksum_results: dict
+    :returns: True if validation passed, False otherwise
+    :rtype: bool
+    """
+    print("\n" + "=" * 60)
+    print("SBOM Validation Summary")
+    print("=" * 60)
+    print(f"Total source packages: {url_results['total_sources']}")
+    print(f"Sources with URLs: {url_results['sources_with_urls']}")
+
+    if url_results['url_verify']:
+        print(f"Accessible URLs: {url_results['accessible_urls']}")
+        print(f"Inaccessible URLs: {url_results['inaccessible_urls']}")
+
+        if url_results['failed_urls']:
+            print("\nFailed URL Checks:")
+            for failure in url_results['failed_urls']:
+                print(f"  - {failure['spdx_id']} ({failure['name']})")
+                print(f"    URL: {failure['url']}")
+
+    if checksum_results['checksum_verify']:
+        print("\nChecksum Validation:")
+        print(f"Sources with checksums: {checksum_results['total_sources_with_checksums']}")
+        print(f"Verified checksums: {checksum_results['verified_checksums']}")
+        print(f"Mismatched checksums: {checksum_results['mismatched_checksums']}")
+        print(f"Missing files: {checksum_results['missing_files']}")
+
+        if checksum_results['failed_checksums']:
+            print("\nFailed Checksum Checks:")
+            for failure in checksum_results['failed_checksums']:
+                print(f"  - {failure['spdx_id']} ({failure['name']})")
+                print(f"    File: {failure['filename']}")
+                print(f"    Algorithm: {failure['algorithm']}")
+                print(f"    Expected: {failure['expected']}")
+                print(f"    Actual:   {failure['actual']}")
+
+    # Determine overall validation result
+    validation_passed = not (
+        url_results["inaccessible_urls"] or checksum_results["mismatched_checksums"]
+    )
+
+    if validation_passed:
+        print("\n✓ SBOM validation PASSED")
+    else:
+        print("\n✗ SBOM validation FAILED")
+
+    return validation_passed
 
 
 def validate_sbom(sbom_file, source_dir=None, url_verify=True, checksum_verify=True):
@@ -251,56 +288,11 @@ def validate_sbom(sbom_file, source_dir=None, url_verify=True, checksum_verify=T
     url_results = validate_source_urls(sbom_data, url_verify)
 
     # Validate checksums
-    checksum_results = {'total_sources_with_checksums': 0, 'verified_checksums': 0,
-                       'mismatched_checksums': 0, 'missing_files': 0, 'failed_checksums': []}
-    if source_dir and checksum_verify:
-        logging.info("Validating source package checksums...")
-        checksum_results = validate_source_checksums(sbom_data, source_dir, checksum_verify)
+    logging.info("Validating source package checksums...")
+    checksum_results = validate_source_checksums(sbom_data, source_dir, checksum_verify)
 
-    # Print summary
-    print("\n" + "=" * 60)
-    print("SBOM Validation Summary")
-    print("=" * 60)
-    print(f"Total source packages: {url_results['total_sources']}")
-    print(f"Sources with URLs: {url_results['sources_with_urls']}")
-
-    if url_verify:
-        print(f"Accessible URLs: {url_results['accessible_urls']}")
-        print(f"Inaccessible URLs: {url_results['inaccessible_urls']}")
-
-        if url_results['failed_urls']:
-            print("\nFailed URL Checks:")
-            for failure in url_results['failed_urls']:
-                print(f"  - {failure['spdx_id']} ({failure['name']})")
-                print(f"    URL: {failure['url']}")
-
-    if source_dir and checksum_verify:
-        print("\nChecksum Validation:")
-        print(f"Sources with checksums: {checksum_results['total_sources_with_checksums']}")
-        print(f"Verified checksums: {checksum_results['verified_checksums']}")
-        print(f"Mismatched checksums: {checksum_results['mismatched_checksums']}")
-        print(f"Missing files: {checksum_results['missing_files']}")
-
-        if checksum_results['failed_checksums']:
-            print("\nFailed Checksum Checks:")
-            for failure in checksum_results['failed_checksums']:
-                print(f"  - {failure['spdx_id']} ({failure['name']})")
-                print(f"    File: {failure['filename']}")
-                print(f"    Algorithm: {failure['algorithm']}")
-                print(f"    Expected: {failure['expected']}")
-                print(f"    Actual:   {failure['actual']}")
-
-    # Determine overall validation result
-    url_passed = url_results['inaccessible_urls'] == 0 if url_verify else True
-    checksum_passed = checksum_results['mismatched_checksums'] == 0 if (source_dir and checksum_verify) else True
-    validation_passed = url_passed and checksum_passed
-
-    if validation_passed:
-        print("\n✓ SBOM validation PASSED")
-    else:
-        print("\n✗ SBOM validation FAILED")
-
-    return validation_passed
+    # Print summary and return validation result
+    return _print_validation_summary(url_results, checksum_results)
 
 
 def main():
@@ -345,6 +337,11 @@ def main():
 
     validate_url = not options.no_url_verify
     validate_checksum = not options.no_checksum_verify
+    if validate_checksum and not options.source_dir:
+        logging.warning(
+            "Checksum verification enabled but no source directory provided; skipped..."
+        )
+        validate_checksum = False
     success = validate_sbom(
         options.sbom_file,
         source_dir=options.source_dir,
