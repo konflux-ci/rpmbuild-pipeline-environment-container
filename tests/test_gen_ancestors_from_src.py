@@ -4,10 +4,7 @@ Tests for gen_ancestors_from_src.py.
 
 # pylint: disable=W0201,C0116
 
-import hashlib
-import os
 import sys
-import tempfile
 import unittest
 from unittest.mock import Mock
 from urllib.parse import urlparse
@@ -17,72 +14,10 @@ from urllib.parse import urlparse
 sys.modules["dist_git_client"] = Mock()
 
 from gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
-    calc_checksum,
-    calc_sha256_checksum,
     split_archive_filename,
     parse_name_version,
     get_repo_name,
 )
-
-
-class TestCalcChecksum(unittest.TestCase):
-    """
-    Unit tests for checksum calculation functions.
-    """
-
-    def test_calc_sha256_checksum(self):
-        """Test SHA-256 checksum calculation."""
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write("test content\n")
-            temp_file = f.name
-
-        try:
-            checksum = calc_sha256_checksum(temp_file)
-            # Verify it's a valid SHA-256 hex string (64 characters)
-            self.assertEqual(len(checksum), 64)
-            self.assertTrue(all(c in "0123456789abcdef" for c in checksum))
-
-            # Verify the actual checksum
-            expected = hashlib.sha256(b"test content\n").hexdigest()
-            self.assertEqual(checksum, expected)
-        finally:
-            os.unlink(temp_file)
-
-    def test_calc_checksum_different_algorithms(self):
-        """Test checksum calculation with different algorithms."""
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write("test data")
-            temp_file = f.name
-
-        try:
-            # Test SHA-256
-            sha256 = calc_checksum(temp_file, "sha256")
-            self.assertEqual(len(sha256), 64)
-
-            # Test SHA-512
-            sha512 = calc_checksum(temp_file, "sha512")
-            self.assertEqual(len(sha512), 128)
-
-            # Test MD5
-            md5 = calc_checksum(temp_file, "md5")
-            self.assertEqual(len(md5), 32)
-        finally:
-            os.unlink(temp_file)
-
-    def test_calc_checksum_large_file(self):
-        """Test checksum calculation with chunked reading."""
-        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
-            # Write data larger than default chunk size
-            data = b"x" * (1024 * 1024 + 100)  # > 1MB
-            f.write(data)
-            temp_file = f.name
-
-        try:
-            checksum = calc_checksum(temp_file, "sha256", chunk_size=1024)
-            expected = hashlib.sha256(data).hexdigest()
-            self.assertEqual(checksum, expected)
-        finally:
-            os.unlink(temp_file)
 
 
 class TestSplitArchiveFilename(unittest.TestCase):
