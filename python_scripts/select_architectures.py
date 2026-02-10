@@ -112,10 +112,10 @@ def _main():
 
     build_architectures = allowed_architectures
     if arches['exclusivearch']:
-        print(f"Limit to ExclusiveArch: {arches["exclusivearch"]}")
+        print(f"Limit to ExclusiveArch: {arches['exclusivearch']}")
         build_architectures &= arches["exclusivearch"]
     if arches['excludearch']:
-        print(f"Avoid ExcludeArch: {arches["excludearch"]}")
+        print(f"Avoid ExcludeArch: {arches['excludearch']}")
         build_architectures -= arches["excludearch"]
     if arches['buildarch'] == set(['noarch']):
         selected_architectures = [random.choice(list(build_architectures))]

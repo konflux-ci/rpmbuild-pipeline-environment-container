@@ -10,10 +10,11 @@ This module provides common utilities for RPM-related operations including:
 import logging
 import os
 
-from norpm.macrofile import system_macro_registry
-from norpm.specfile import specfile_expand, ParserHooks
-from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
+from norpm.macrofile import system_macro_registry
+from norpm.overrides import override_macro_registry
+from norpm.specfile import ParserHooks, specfile_expand
+from specfile import Specfile
 
 
 def create_macro_registry(macro_overrides=None, database=None, target_distribution=None):
@@ -154,61 +155,29 @@ def get_arch_specific_tags(specfile, database, target_distribution):
     return arches
 
 
-class SourceHooks(ParserHooks):
-    """Capture Source tags from spec file parsing."""
-
-    def __init__(self, srcdir):
-        """Initialize SourceHooks.
-
-        :param srcdir: Source directory for resolving filenames
-        :type srcdir: str
-        """
-        self.sources = {}
-        self.srcdir = srcdir
-
-    def tag_found(self, name, value, _tag_raw):
-        """Capture Source tags during spec file parsing.
-
-        :param name: Tag name (lowercase)
-        :type name: str
-        :param value: Expanded tag value
-        :type value: str
-        :param _tag_raw: Raw tag value (unused)
-        :type _tag_raw: str
-        """
-        # Match source0, source1, etc. (name is lowercased by norpm)
-        if name.startswith("source"):
-            source_num = name[6:] if len(name) > 6 else "0"
-            self.sources[source_num] = value
-
-
-def parse_spec_source_tags(specfile, srcdir=".", database=None, target_distribution=None):
-    """Parse Source tags from specfile using SourceHooks.
+def parse_spec_source_tags(specfile, srcdir="."):
+    """Parse Source tags from specfile using python-specfile.
 
     :param specfile: Path to the specfile
     :type specfile: str
-    :param srcdir: Source directory for resolving filenames
+    :param srcdir: Source directory for resolving filenames (unused with python-specfile)
     :type srcdir: str
-    :param database: Optional path to JSON file with RPM macro overrides
-    :type database: str or None
-    :param target_distribution: Optional target distribution (e.g., 'fedora-rawhide', 'rhel-10')
-    :type target_distribution: str or None
     :returns: Dictionary mapping source number to location (e.g., {"0": "https://...", "1": "patch.tar.gz"})
     :rtype: dict
     """
-    # Set up macro registry with _sourcedir macro
-    registry = create_macro_registry(
-        macro_overrides={"_sourcedir": srcdir},
-        database=database,
-        target_distribution=target_distribution,
-    )
-
-    # Parse spec file with SourceHooks
-    hooks = SourceHooks(srcdir)
     try:
-        with open(specfile, "r", encoding="utf-8") as fd:
-            specfile_expand(fd.read(), registry, hooks)
-    except NorpmError as err:
+        spec = Specfile(specfile)
+        sources_dict = {}
+
+        with spec.sources() as sources:
+            for source in sources:
+                # Convert number to string for consistency with previous implementation
+                source_num = str(source.number)
+                # Expand macros in the location
+                expanded_location = spec.expand(source.location)
+                sources_dict[source_num] = expanded_location
+
+        return sources_dict
+    except Exception as err:
         logging.error("Failed to parse spec file %s: %s", specfile, err)
         raise
-    return hooks.sources
