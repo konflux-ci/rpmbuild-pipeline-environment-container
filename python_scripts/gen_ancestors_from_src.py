@@ -18,7 +18,6 @@ import logging
 import os
 import subprocess
 import sys
-import urllib.request
 
 from dist_git_client import _load_config as load_dist_git_config
 from dist_git_client import get_distgit_config
@@ -157,32 +156,6 @@ def calc_sha256_checksum(filepath, chunk_size=1024**2):
     return calc_checksum(filepath, "sha256", chunk_size)
 
 
-def is_url_accessible(url):
-    """Verify whether a URL is accessible.
-
-    Performs an HTTP HEAD request to check if the URL can be reached.
-    Automatically follows redirects.
-
-    :param url: URL to verify
-    :type url: str
-    :returns: True if URL is accessible, False otherwise
-    :rtype: bool
-    """
-    if not url:
-        return False
-
-    try:
-        # Create opener that follows redirects (default behavior)
-        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
-        req = urllib.request.Request(url, method='HEAD')
-
-        with opener.open(req, timeout=5) as response:
-            return response.status == 200
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logging.debug("URL accessibility check failed for %s: %s", url, e)
-        return False
-
-
 def load_distgit_config(srcdir, dist_git_config_dir):
     """Load dist-git configuration for the given source directory.
 
@@ -207,7 +180,7 @@ def load_distgit_config(srcdir, dist_git_config_dir):
         os.chdir(original_cwd)
 
 
-def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=True):
+def parse_dist_git_sources(sources_file, repo_name, distgit_config):
     """Parse the sources file from dist-git repo.
 
     The sources file format follows dist-git-client conventions:
@@ -222,8 +195,6 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
     :type repo_name: str
     :param distgit_config: Dist-git instance configuration
     :type distgit_config: dict
-    :param url_verify: Whether to validate lookaside URL accessibility
-    :type url_verify: bool
     :returns: Dictionary mapping filename to midstream checksum info
     :rtype: dict
     """
@@ -272,10 +243,6 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
                     distgit_config["lookaside_location"],
                     distgit_config["lookaside_uri_pattern"].format(**kwargs)
                 ])
-                # Verify the URL is accessible (if validation is enabled)
-                if url_verify and not is_url_accessible(lookaside_url):
-                    logging.warning("[IMPORTANT] Lookaside URL for %s is not accessible: %s",
-                                    filename, lookaside_url)
 
             sources_map[filename] = {
                 "alg": hashtype.upper(),
@@ -288,15 +255,13 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify=T
     return sources_map
 
 
-def list_spec_sources(specfile, srcdir=".", url_verify=True):
+def list_spec_sources(specfile, srcdir="."):
     """List sources from specfile using python-specfile.
 
     :param specfile: Path to the specfile
     :type specfile: str
     :param srcdir: Source directory containing the archives
     :type srcdir: str
-    :param url_verify: Whether to validate URL accessibility
-    :type url_verify: bool
     :returns: List of source dictionaries
     :rtype: list
     """
@@ -315,10 +280,6 @@ def list_spec_sources(specfile, srcdir=".", url_verify=True):
         if loc.startswith(UPSTREAM_URL_SCHEMES):
             url = loc
             sfn = os.path.basename(url.split("#")[0])  # Remove fragment, get basename
-            # Verify the URL is accessible (if validation is enabled)
-            if url_verify and not is_url_accessible(url):
-                logging.warning("[IMPORTANT] %s: Upstream URL for %s is not accessible: %s",
-                                source_tag, sfn, url)
         else:
             url = None
             sfn = os.path.basename(loc)
@@ -426,7 +387,7 @@ def _verify_source_checksum(src_entry, midstream_info, srcdir):
         )
 
 
-def list_sources(specfile, srcdir, repo_name, distgit_config, *, url_verify=True):
+def list_sources(specfile, srcdir, repo_name, distgit_config):
     """List sources with midstream information from dist-git sources file.
 
     Combines spec sources from python-specfile with midstream checksums
@@ -440,13 +401,11 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, *, url_verify=True
     :type repo_name: str
     :param distgit_config: Dist-git instance configuration
     :type distgit_config: dict
-    :param url_verify: Whether to validate URL accessibility (keyword-only)
-    :type url_verify: bool
     :returns: List of source dictionaries with midstream property
     :rtype: list
     """
     # Get sources from specfile
-    sources = list_spec_sources(specfile, srcdir, url_verify)
+    sources = list_spec_sources(specfile, srcdir)
 
     # Get sources file path from dist-git config
     sources_file_template = distgit_config.get("sources_file", "sources")
@@ -454,7 +413,7 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, *, url_verify=True
     sources_file = os.path.join(srcdir, sources_file_name)
 
     # Parse dist-git sources file for midstream checksums
-    midstream_sources = parse_dist_git_sources(sources_file, repo_name, distgit_config, url_verify)
+    midstream_sources = parse_dist_git_sources(sources_file, repo_name, distgit_config)
 
     # Add midstream property to each source and verify checksums
     for src_entry in sources:
@@ -489,12 +448,6 @@ def main():
         default=None,
         help="Path to dist-git-client config directory (default: $COPR_DISTGIT_CLIENT_CONFDIR or /etc/dist-git-client)",
     )
-    parser.add_argument(
-        "--no-url-verify",
-        action="store_true",
-        default=False,
-        help="Disable URL accessibility validation",
-    )
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
@@ -522,13 +475,7 @@ def main():
     specfile = search_specfile(src_dir)
     logging.info("Specfile found: %s", specfile)
 
-    # Determine whether to validate lookaside URLs
-    validate_url = not options.no_url_verify
-
-    sources = list_sources(
-        specfile, src_dir, repo_name, distgit_config,
-        url_verify=validate_url,
-    )
+    sources = list_sources(specfile, src_dir, repo_name, distgit_config)
     result = {"sources": sources}
     if options.output_file:
         if os.path.exists(options.output_file):
