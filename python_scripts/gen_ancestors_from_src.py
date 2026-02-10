@@ -338,55 +338,6 @@ def get_repo_name(remote_url):
     return repo_name
 
 
-def _verify_source_checksum(src_entry, midstream_info, srcdir):
-    """Verify source checksum against midstream checksum.
-
-    :param src_entry: Source entry dictionary
-    :type src_entry: dict
-    :param midstream_info: Midstream source information
-    :type midstream_info: dict
-    :param srcdir: Source directory path
-    :type srcdir: str
-    """
-    if "checksum" not in midstream_info:
-        return
-
-    midstream_alg = midstream_info.get("alg", "SHA256")
-    midstream_checksum = midstream_info["checksum"]
-    sfn = src_entry["filename"]
-
-    # Get local checksum, reusing if algorithm matches
-    local_alg = src_entry.get("alg", "").upper()
-    local_checksum = None
-
-    if local_alg == midstream_alg.upper():
-        # Reuse already calculated checksum
-        local_checksum = src_entry.get("checksum")
-    else:
-        # Need to recalculate with midstream algorithm
-        fp = os.path.join(srcdir, sfn)
-        if not os.path.isfile(fp):
-            logging.error("[IMPORTANT] %s doesn't exist", fp)
-            return
-        try:
-            # Replace hyphens in algorithm name without underlines,
-            # for SPDX -> hashlib alg format
-            alg_name = midstream_alg.replace("_", "").lower()
-            local_checksum = calc_checksum(fp, alg_name)
-        except Exception as e:  # pylint: disable=W0718 broad-exception-caught
-            logging.error(
-                "[IMPORTANT] Failed to calculate checksum for %s using algorithm %s: %s",
-                sfn, midstream_alg, e
-            )
-
-    # Compare checksums if local checksum is available
-    if local_checksum and local_checksum != midstream_checksum:
-        logging.warning(
-            "[IMPORTANT] Checksum mismatch for %s: local=%s, midstream=%s (algorithm: %s)",
-            sfn, local_checksum, midstream_checksum, midstream_alg
-        )
-
-
 def list_sources(specfile, srcdir, repo_name, distgit_config):
     """List sources with midstream information from dist-git sources file.
 
@@ -415,13 +366,12 @@ def list_sources(specfile, srcdir, repo_name, distgit_config):
     # Parse dist-git sources file for midstream checksums
     midstream_sources = parse_dist_git_sources(sources_file, repo_name, distgit_config)
 
-    # Add midstream property to each source and verify checksums
+    # Add midstream property to each source
     for src_entry in sources:
         sfn = src_entry["filename"]
         if sfn in midstream_sources:
             src_entry["midstream"] = midstream_sources[sfn]
             logging.debug("Added midstream info for %s: %s", sfn, midstream_sources[sfn])
-            _verify_source_checksum(src_entry, midstream_sources[sfn], srcdir)
 
     return sources
 
