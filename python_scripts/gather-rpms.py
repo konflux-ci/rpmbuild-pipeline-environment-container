@@ -50,17 +50,18 @@ def symlink(src, arch, prepend_arch=False):
     else:
         dst = os.path.join(STAGING_DIR, src)
         src = os.path.join('..', arch, src)
-    logging.debug(f"Symlinking {dst} -> {src}")
+    logging.debug("Symlinking %s -> %s", dst, src)
     os.symlink(src, dst)
 
 
 def handle_archdir(arch):
+    """Go through each archdir and populate global buildroots and srpm"""
     # need to be global here as local scope is used otherwise
     global srpm
-    logging.info(f"Handling archdir {arch}")
-    logging.debug(f"Contents of archdir {arch} are {os.listdir(arch)}")
+    logging.info("Handling archdir %s", arch)
+    logging.debug("Contents of archdir %s are %s", arch, os.listdir(arch))
     for filename in os.listdir(arch):
-        logging.debug(f"Handling filename {filename}")
+        logging.debug("Handling filename %s", filename)
         if filename.endswith('.noarch.rpm'):
             if filename not in noarch_rpms:
                 noarch_rpms.append(filename)
@@ -107,6 +108,7 @@ def handle_archdir(arch):
 
 
 def prepare_arch_data():
+    """Loop over all archdirs"""
     # we're in results dir, so only archdirs should be present
     for arch in sorted(os.listdir()):
         if not os.path.isdir(arch):
@@ -129,8 +131,8 @@ def get_metadata():
 
 
 def generate_oras_filelist():
-    # generate oras filelists
-    with open('oras-push-list.txt', 'wt') as f:
+    """generate oras filelists"""
+    with open('oras-push-list.txt', 'wt', encoding='utf-8') as f:
         f.write(f'{srpm}:application/x-rpm\n')
         for arch, arch_rpms in rpms.items():
             for rpm in arch_rpms:
@@ -144,6 +146,7 @@ def generate_oras_filelist():
 
 
 def sha256sum(path: str):
+    """Compute sha256 for a file"""
     checksum = hashlib.sha256()
     with open(path, "rb") as f:
         while True:
@@ -154,8 +157,30 @@ def sha256sum(path: str):
     return checksum.hexdigest()
 
 
-# create cg_import.json
+def populate_buildroot_components():
+    """
+    Populate buildroot components from mock's buildroot_lock.json files.
+    This needs to be called before create_md_file() so that cg_import.json
+    contains the buildroot components.
+    """
+    for arch, buildroot in buildroots.items():
+        lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
+        if not os.path.exists(lockfile_path):
+            logging.warning("Missing buildroot_lock.json for %s, buildroot components will be empty", arch)
+            continue
+        with open(lockfile_path, "rt", encoding="utf-8") as fo:
+            lockfile = json.load(fo)
+            for rpm in lockfile['buildroot']['rpms']:
+                component = {k: v for k, v in rpm.items()
+                             if k in {'name', 'version', 'release', 'arch',
+                                      'epoch', 'sigmd5', 'signature', 'url',
+                                      'license'}}
+                component["type"] = "rpm"
+                buildroot['components'].append(component)
+
+
 def create_md_file(options, extra_metadata=None):
+    """create cg_import.json"""
     path = os.path.join(STAGING_DIR, srpm)
     nevr = koji.get_header_fields(path, ['name', 'version', 'epoch', 'release'])
     extra = {
@@ -190,7 +215,7 @@ def create_md_file(options, extra_metadata=None):
     }
 
     # create buildroot ids
-    for idx, arch in enumerate(buildroots.keys()):
+    for idx, arch in enumerate(buildroots):
         buildroots[arch]['id'] = idx
 
     output = []
@@ -213,8 +238,8 @@ def create_md_file(options, extra_metadata=None):
         })
 
     # arch rpms
-    for arch in rpms:
-        for rpm in rpms[arch]:
+    for arch, arch_rpms in rpms.items():
+        for rpm in arch_rpms:
             path = os.path.join(STAGING_DIR, rpm)
             nevra = koji.get_header_fields(path, ['name', 'version', 'release', 'epoch', 'arch'])
             output.append({
@@ -253,7 +278,8 @@ def create_md_file(options, extra_metadata=None):
         "output": output,
     }
 
-    json.dump(md, open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt'), indent=2)
+    with open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt', encoding='utf-8') as fo:
+        json.dump(md, fo, indent=2)
 
 
 # from https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/from-koji.py
@@ -264,8 +290,10 @@ license_replacements = {
     "Public Domain": "LicenseRef-Fedora-Public-Domain", # TODO: exception for redhat-ca-certificates
 }
 
+
 # from https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/from-koji.py
 def get_license(filename):
+    """Parse license field from RPM"""
     licensep = subprocess.run(
         stdout=subprocess.PIPE,
         check=True,
@@ -280,13 +308,16 @@ def get_license(filename):
     license = licensep.stdout.decode("utf-8")
     return clean_license(license)
 
+
 def clean_license(license):
+    """License string replacements for SPDX compatibility"""
     for orig, repl in license_replacements.items():
         license = re.sub(orig, repl, license)
     return license
 
 
 def create_sbom():
+    """Create SPDX SBOM file"""
     # https://github.com/RedHatProductSecurity/security-data-guidelines/blob/main/sbom/examples/rpm/openssl-3.0.7-18.el9_2.spdx.json
     sbom = {
         "spdxVersion": "SPDX-2.3",
@@ -355,20 +386,10 @@ def create_sbom():
             })
 
     # Add buildroots
+    # Note: buildroot components are already populated by populate_buildroot_components()
+    # which is called before create_md_file(), so we just need to use them here for SBOM
     for arch, arch_rpms in rpms.items():
-        lockfile_path = os.path.join(arch, 'results/buildroot_lock.json')
-        if not os.path.exists(lockfile_path):
-            logging.error(f"Missing buildroot_lock.json for {arch}")
-            continue
-        lockfile = json.load(open(lockfile_path, "rt"))
-        buildroot = lockfile['buildroot']
-        for rpm in buildroot['rpms']:
-            component = {k: v for k, v in rpm.items()
-                         if k in ['name', 'version', 'release', 'arch', 'epoch',
-                                  'sigmd5', 'signature']}
-            component["type"] = "rpm"
-            buildroots[arch]['components'].append(component)
-
+        for rpm in buildroots[arch]['components']:
             spdxid = f"SPDXRef-{rpm['arch']}-{rpm['name']}"
             pkg = {
                 "SPDXID": spdxid,
@@ -382,7 +403,7 @@ def create_sbom():
                     {
                         "referenceCategory": "PACKAGE-MANAGER",
                         "referenceType": "purl",
-                        "referenceLocator": f"pkg:rpm/redhat/{nevra['name']}@{nevra['version']}-{nevra['release']}?arch={nevra['arch']}",
+                        "referenceLocator": f"pkg:rpm/redhat/{rpm['name']}@{rpm['version']}-{rpm['release']}?arch={rpm['arch']}",
                     }
                 ],
                 "checksums": [
@@ -480,13 +501,15 @@ def create_sbom():
 
     # in the end we can update documentDescribes
     sbom['documentDescribes'] = rpm_spdxids
-    json.dump(sbom, open(os.path.join(STAGING_DIR, SBOM_JSON), 'wt'), indent=2)
+    with open(os.path.join(STAGING_DIR, SBOM_JSON), 'wt', encoding='utf-8') as fo:
+        json.dump(sbom, fo, indent=2)
 
 
 def write_nvr():
+    """Write file with NVR"""
     if srpm:
-        with open(NVR_FILE, "wt") as fo:
-           fo.write(srpm[:-8])
+        with open(NVR_FILE, "wt", encoding='utf-8') as fo:
+            fo.write(srpm[:-8])
 
 
 if __name__ == "__main__":
@@ -514,6 +537,8 @@ if __name__ == "__main__":
 
     logging.info("Preparing arch data")
     prepare_arch_data()
+    logging.info("Populating buildroot components")
+    populate_buildroot_components()
     logging.info("Gathering extra metadata")
     extra_metadata = get_metadata()
     logging.info("Creating md file")
