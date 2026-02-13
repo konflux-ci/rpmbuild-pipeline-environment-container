@@ -22,7 +22,7 @@ import requests
 from requests.models import Response
 
 # Local imports
-from pulp_utils import (
+from python_scripts.lib.pulp.utils import (
     DEFAULT_TIMEOUT, DEFAULT_TASK_TIMEOUT,
     create_session_with_retry, validate_file_path,
     sanitize_error_message, read_file_with_base64_decode
