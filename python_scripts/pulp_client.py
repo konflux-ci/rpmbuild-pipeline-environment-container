@@ -22,10 +22,11 @@ import requests
 from requests.models import Response
 
 # Local imports
+from common_utils import sanitize_error_message
 from pulp_utils import (
     DEFAULT_TIMEOUT, DEFAULT_TASK_TIMEOUT,
     create_session_with_retry, validate_file_path,
-    sanitize_error_message, read_file_with_base64_decode
+    read_file_with_base64_decode
 )
 
 # Optional imports with fallback

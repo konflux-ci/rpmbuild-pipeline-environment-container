@@ -20,14 +20,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 # Local imports
+from common_utils import sanitize_error_message, setup_logging
 from pulp_client import PulpClient
 from pulp_utils import (
     PulpHelper,
-    setup_logging,
     validate_file_path,
     RESULTS_JSON_FILENAME,
     create_labels,
-    sanitize_error_message
 )
 
 # ============================================================================
