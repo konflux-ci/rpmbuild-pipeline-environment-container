@@ -11,7 +11,7 @@ jobs:
   run-python-unit-tests:
     runs-on: ubuntu-latest
     container:
-      image: fedora:43
+      image: registry.fedoraproject.org/fedora:43@sha256:3f4c89774b10755c749704f4a5a736dc80f6c544817518d1886986f474ed6f62
 
     steps:
       - name: Checkout code
@@ -28,6 +28,9 @@ jobs:
 
       - name: Install test dependencies
         run: pip install -r test_requirements.txt
+      
+      - name: Check test image version
+        run: pytest check_test_image.py
 
       - name: Run unit tests
         run: ./run_tests.sh
