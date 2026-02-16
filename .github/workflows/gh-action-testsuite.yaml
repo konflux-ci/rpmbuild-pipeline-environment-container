@@ -8,10 +8,22 @@ on:
     branches: [main]
 
 jobs:
+  get-image-link:
+    runs-on: ubuntu-latest
+    outputs:
+      fedora_image_link: ${{ steps.set-image-link.outputs.image_link }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-image-link
+        run: |
+          IMAGE_LINK=$(cat Containerfile | grep FROM | cut -d ' ' --fields=2)
+          echo "image_link=$IMAGE_LINK" >> $GITHUB_OUTPUT
+
   run-python-unit-tests:
+    needs: get-image-link
     runs-on: ubuntu-latest
     container:
-      image: fedora:43
+      image: ${{ needs.get-image-link.outputs.fedora_image_link }}
 
     steps:
       - name: Checkout code
