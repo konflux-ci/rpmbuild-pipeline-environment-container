@@ -3,13 +3,11 @@ FROM registry.fedoraproject.org/fedora:43@sha256:3f4c89774b10755c749704f4a5a736d
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
 
-ADD rpmdiff.patch /rpmdiff.patch
 ADD rpmautospec-norpm.patch /
 ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
-    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec jq && \
-    patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
+    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec jq rpmlint && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
