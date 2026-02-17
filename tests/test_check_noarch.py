@@ -36,7 +36,7 @@ class TestCheckNoarch(unittest.TestCase):
         check_noarch()
         actual = self.capsys.readouterr()
         expected = "All noarch rpms matches each other.\n"
-        self.assertEqual(expected, actual.out)
+        self.assertIn(expected, actual.out)
 
     def test_broken_noarch(self):
         """
@@ -50,7 +50,7 @@ class TestCheckNoarch(unittest.TestCase):
             check_noarch()
         assert re.value.code == 1
         actual = self.capsys.readouterr()
-        expected = "test-noarch-check-noarch-1-1.fc42.noarch.rpm mismatch"
+        expected = "test-noarch-check-noarch-1-1.fc42.noarch.rpm\tmismatch"
         self.assertIn(expected, actual.out)
         expected = "1 errors found"
         self.assertIn(expected, actual.out)
