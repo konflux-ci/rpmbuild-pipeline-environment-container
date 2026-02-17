@@ -22,16 +22,15 @@ from requests import Session, exceptions, Response
 import requests
 
 # Local imports
+from common_utils import sanitize_error_message, setup_logging
 from pulp_client import PulpClient
 from pulp_utils import (
     PulpHelper,
-    setup_logging,
     determine_build_id,
     initialize_upload_tracking,
     upload_sboms_and_logs_from_artifacts,
     upload_rpms_from_artifacts,
     create_session_with_retry,
-    sanitize_error_message,
     read_file_with_base64_decode
 )
 

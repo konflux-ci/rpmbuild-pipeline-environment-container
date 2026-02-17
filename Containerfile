@@ -8,7 +8,8 @@ ADD rpmautospec-norpm.patch /
 ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
-    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec jq && \
+    dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile \
+    redhat-rpm-config acl rpmautospec jq && \
     patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf remove -y patch && \
@@ -19,20 +20,14 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
+ADD python_scripts/*.py /usr/local/bin/
+# TODO: Temporarily keep it in /usr/bin until we update the reference in rpmbuild-pipeline
 ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/pulp_upload.py /usr/bin
-ADD python_scripts/pulp_client.py /usr/bin
-ADD python_scripts/pulp_utils.py /usr/bin
-ADD python_scripts/pulp_transfer.py /usr/bin
-
-ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
-ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
-ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
-ADD patch-git-prepare.sh /usr/bin
+ADD patch-git-prepare.sh /usr/local/bin
 
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
 RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \

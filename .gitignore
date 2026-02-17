@@ -5,3 +5,7 @@ test-git-repos/
 test-source-rpms/
 trace
 tests/sbom_merged.json
+.claude/
+CLAUDE.local.md
+.devcontainer/
+
