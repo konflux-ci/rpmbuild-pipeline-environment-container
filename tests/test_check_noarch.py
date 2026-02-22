@@ -11,7 +11,7 @@ import unittest
 
 import pytest
 
-from python_scripts.check_noarch import _main as check_noarch
+from python_scripts.bin.check_noarch import _main as check_noarch
 
 
 class TestCheckNoarch(unittest.TestCase):

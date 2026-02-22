@@ -7,8 +7,9 @@ import os
 import sys
 from unittest import TestCase
 
-
-from python_scripts.merge_syft_sbom import _main as merge_syft_sbom
+from python_scripts.bin.merge_syft_sbom import (
+    _main as merge_syft_sbom,
+)
 
 SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 

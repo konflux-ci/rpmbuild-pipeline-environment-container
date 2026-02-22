@@ -1,7 +1,15 @@
 FROM registry.fedoraproject.org/fedora:43@sha256:2c4de0dcd2fe007ed12637fe5d67b0130da39a2e107751b05b830c6e1c647995
 
+ARG WORKSPACE=/konflux
+
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
+
+WORKDIR $WORKSPACE
+
+ENV \
+    # python shared library
+    PYTHONPATH=$PYTHONPATH:$WORKSPACE
 
 ADD rpmdiff.patch /rpmdiff.patch
 ADD rpmautospec-norpm.patch /
@@ -10,7 +18,7 @@ ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 RUN \
     dnf -y install mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config acl rpmautospec jq && \
     patch /usr/lib/python3.14/site-packages/koji/rpmdiff.py < /rpmdiff.patch && \
-    patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
+    patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < /rpmautospec-norpm.patch && \
     dnf remove -y patch && \
     dnf -y clean all && \
     useradd mockbuilder && \
@@ -19,15 +27,11 @@ RUN \
 ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/gather-rpms.py /usr/bin
-ADD python_scripts/pulp_upload.py /usr/bin
-ADD python_scripts/pulp_client.py /usr/bin
-ADD python_scripts/pulp_utils.py /usr/bin
-ADD python_scripts/pulp_transfer.py /usr/bin
+# python lib
+ADD python_scripts/lib $WORKSPACE/python_scripts/lib
 
-ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
-ADD python_scripts/merge_syft_sbom.py /usr/local/bin/merge_syft_sbom.py
-ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
+# python scripts to /usr/local/bin
+ADD --chmod=755 python_scripts/bin/*.py /usr/local/bin
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
@@ -44,3 +48,4 @@ RUN test "$(rpm --eval '%[ v"'"$(rpm -q --qf '%{VERSION}\n' mock)"'" >= v"6.4" ]
 ADD resolv.conf /etc/resolv.conf
 
 RUN grep sys.exit /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
+
