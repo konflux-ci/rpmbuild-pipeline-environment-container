@@ -5,11 +5,23 @@ and error message sanitization.
 """
 
 import hashlib
+import logging
 
 
-# ============================================================================
-# File Utilities
-# ============================================================================
+def setup_logging(debug=False):
+    """Set up logging configuration.
+
+    :param debug: Enable debug logging if True
+    :type debug: bool
+    """
+
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="[%(asctime)s] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
 
 def calc_checksum(filepath, algorithm="sha256", chunk_size=1024**2):
     """Calculate checksum of a file using specified algorithm.
