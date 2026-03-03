@@ -5,11 +5,13 @@ Tests common_utils.py.
 # pylint: disable=W0201,C0116
 
 import hashlib
+import logging
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from common_utils import calc_checksum
+from common_utils import calc_checksum, setup_logging
 
 
 class TestCalcChecksum(unittest.TestCase):
@@ -119,6 +121,42 @@ class TestCalcChecksum(unittest.TestCase):
             self.assertEqual(lower, mixed)
         finally:
             os.unlink(temp_file)
+
+
+class TestSetupLogging(unittest.TestCase):
+    """
+    Unit tests for setup_logging function.
+    """
+
+    @patch("common_utils.logging.basicConfig")
+    def test_default_level_is_info(self, mock_basic_config):
+        """Test that default logging level is INFO."""
+        setup_logging()
+        mock_basic_config.assert_called_once_with(
+            level=logging.INFO,
+            format="[%(asctime)s] %(levelname)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+    @patch("common_utils.logging.basicConfig")
+    def test_debug_true_sets_debug_level(self, mock_basic_config):
+        """Test that debug=True sets DEBUG level."""
+        setup_logging(debug=True)
+        mock_basic_config.assert_called_once_with(
+            level=logging.DEBUG,
+            format="[%(asctime)s] %(levelname)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+    @patch("common_utils.logging.basicConfig")
+    def test_debug_false_sets_info_level(self, mock_basic_config):
+        """Test that debug=False explicitly sets INFO level."""
+        setup_logging(debug=False)
+        mock_basic_config.assert_called_once_with(
+            level=logging.INFO,
+            format="[%(asctime)s] %(levelname)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
 
 
 if __name__ == "__main__":

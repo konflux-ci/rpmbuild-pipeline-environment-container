@@ -17,7 +17,7 @@ import os
 import sys
 import urllib.request
 
-from common_utils import calc_checksum
+from common_utils import calc_checksum, setup_logging
 
 
 def is_url_accessible(url):
@@ -333,10 +333,7 @@ def main():
 
     options = parser.parse_args()
 
-    if options.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    setup_logging(debug=options.debug)
 
     validate_url = not options.no_url_verify
     validate_checksum = not options.no_checksum_verify
