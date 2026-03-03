@@ -363,6 +363,12 @@ def main():
         default=None,
         help="Path to dist-git-client config directory (default: $COPR_DISTGIT_CLIENT_CONFDIR or /etc/dist-git-client)",
     )
+    parser.add_argument(
+        "--specfile",
+        action="store",
+        help="Path to specfile, mainly used when the expanded specfile is provided by mock, "
+             "(default: search for specfile in source directory)",
+    )
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
@@ -384,8 +390,14 @@ def main():
 
     repo_name = get_repo_name(parsed_url)
 
-    specfile = search_specfile(src_dir)
-    logging.info("Specfile found: %s", specfile)
+    if options.specfile:
+        specfile = os.path.abspath(options.specfile)
+        if not os.path.isfile(specfile):
+            raise ValueError(f"specfile: {specfile} does not exist or is not a file")
+        logging.info("Using provided specfile: %s", specfile)
+    else:
+        specfile = search_specfile(src_dir)
+        logging.info("Specfile found: %s", specfile)
 
     sources = list_sources(specfile, src_dir, repo_name, distgit_config)
     result = {"sources": sources}
