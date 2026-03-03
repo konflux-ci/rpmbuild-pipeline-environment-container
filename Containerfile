@@ -17,20 +17,13 @@ RUN \
 
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/gather_rpms.py /usr/local/bin/gather_rpms.py
-ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
-ADD python_scripts/common_utils.py /usr/local/bin/common_utils.py
-ADD python_scripts/gen_ancestors_from_src.py /usr/local/bin/gen_ancestors_from_src.py
-ADD python_scripts/merge_sboms.py /usr/local/bin/merge_sboms.py
+ADD python_scripts/*.py /usr/local/bin
 RUN ln -s merge_sboms.py /usr/local/bin/merge_syft_sbom.py
-ADD python_scripts/rpm_utils.py /usr/local/bin/rpm_utils.py
-ADD python_scripts/select_architectures.py /usr/local/bin/select_architectures.py
-ADD python_scripts/validate_sbom.py /usr/local/bin/validate_sbom.py
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
-ADD patch-git-prepare.sh /usr/bin
+ADD patch-git-prepare.sh /usr/local/bin
 
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
 RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \
