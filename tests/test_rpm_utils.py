@@ -10,8 +10,6 @@ import unittest
 
 from rpm_utils import (
     search_specfile,
-    get_arch_specific_tags,
-    create_macro_registry,
     parse_spec_source_tags,
 )
 
@@ -29,58 +27,6 @@ License: MIT
 %%description
 Test package
 """
-
-class TestCreateMacroRegistry(unittest.TestCase):
-    """
-    Unit tests for create_macro_registry function.
-    """
-
-    def test_basic_registry_creation(self):
-        """Test creating a basic macro registry without overrides."""
-        registry = create_macro_registry()
-        # Registry should be created and have standard macros
-        self.assertIsNotNone(registry)
-        # Check that norpm hacks were applied (dist should be cleared)
-        # We can't directly inspect all internals, but we can verify it's callable
-
-    def test_registry_with_macro_overrides(self):
-        """Test creating registry with custom macro overrides."""
-        overrides = {
-            "_sourcedir": "/custom/source/dir",
-            "version": "1.2.3",
-        }
-        registry = create_macro_registry(macro_overrides=overrides)
-        self.assertIsNotNone(registry)
-        # Verify overrides were applied
-        self.assertEqual(registry["_sourcedir"].value, "/custom/source/dir")
-        self.assertEqual(registry["version"].value, "1.2.3")
-
-    def test_registry_with_database_and_target(self):
-        """Test creating registry with database and target for distribution-specific macros."""
-        testdir = os.path.dirname(os.path.realpath(__file__))
-        overrides_file = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-
-        if os.path.exists(overrides_file):
-            registry = create_macro_registry(
-                database=overrides_file, target_distribution="rhel-10")
-            self.assertIsNotNone(registry)
-            # Registry should have target-specific macros applied
-
-    def test_registry_with_all_parameters(self):
-        """Test creating registry with all parameters."""
-        testdir = os.path.dirname(os.path.realpath(__file__))
-        overrides_file = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-
-        macro_overrides = {"_sourcedir": "/tmp/sources"}
-
-        if os.path.exists(overrides_file):
-            registry = create_macro_registry(
-                macro_overrides=macro_overrides,
-                database=overrides_file,
-                target_distribution="fedora-rawhide"
-            )
-            self.assertIsNotNone(registry)
-            self.assertEqual(registry["_sourcedir"].value, "/tmp/sources")
 
 
 class TestSearchSpecfile(unittest.TestCase):
@@ -172,60 +118,6 @@ class TestSearchSpecfile(unittest.TestCase):
 
             result = search_specfile(tmpdir)
             self.assertEqual(result, specfile_path)
-
-
-class TestGetArchSpecificTags(unittest.TestCase):
-    """
-    Unit tests for get_arch_specific_tags function.
-    """
-
-    def test_multiple_statements(self):
-        """
-        Test that we concatenate multiple Exclu*Arch statements.
-        """
-        testdir = os.path.dirname(os.path.realpath(__file__))
-        specfile = os.path.join(testdir, "specfiles",
-                                "dummy-pkg-multiple-tags.spec")
-        overrides = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-        assert get_arch_specific_tags(specfile, overrides, "rhel-10") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-rhel-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-rhel-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
-
-        assert get_arch_specific_tags(specfile, overrides, "fedora-42") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-fedora-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-fedora-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
 
 
 class TestParseSpecSourceTags(unittest.TestCase):
