@@ -325,9 +325,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(testdir, "results.json")
         sys.argv = ["this", "--workdir", testdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(FileNotFoundError) as re:
             select_architectures()
-        self.assertEqual("no spec file available", str(re.exception))
+        self.assertIn("No specfile found", str(re.exception))
 
     def test_more_specfiles(self):
         """
@@ -341,11 +341,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(self.testdir, "results.json")
         sys.argv = ["this", "--workdir", self.workdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(OSError) as re:
             select_architectures()
-        expected_err_message_1 = f"too many specfiles: {', '.join(sorted(specfiles_paths))}"
-        expected_err_message_2 = f"too many specfiles: {', '.join(sorted(specfiles_paths, reverse=True))}"
-        self.assertIn(str(re.exception), [expected_err_message_1, expected_err_message_2])
+        self.assertIn("Multiple specfiles found", str(re.exception))
 
     def test_unknown_macros(self):
         """
