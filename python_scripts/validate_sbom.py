@@ -15,35 +15,8 @@ import json
 import logging
 import os
 import sys
-import urllib.request
 
-from common_utils import calc_checksum, setup_logging
-
-
-def is_url_accessible(url):
-    """Verify whether a URL is accessible.
-
-    Performs an HTTP HEAD request to check if the URL can be reached.
-    Automatically follows redirects.
-
-    :param url: URL to verify
-    :type url: str
-    :returns: True if URL is accessible, False otherwise
-    :rtype: bool
-    """
-    if not url:
-        return False
-
-    try:
-        # Create opener that follows redirects (default behavior)
-        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
-        req = urllib.request.Request(url, method='HEAD')
-
-        with opener.open(req, timeout=5) as response:
-            return response.status == 200
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logging.debug("URL accessibility check failed for %s: %s", url, e)
-        return False
+from common_utils import calc_checksum, is_url_accessible, setup_logging
 
 
 def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):

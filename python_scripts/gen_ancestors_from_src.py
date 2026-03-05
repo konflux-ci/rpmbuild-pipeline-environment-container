@@ -27,7 +27,6 @@ from rpm_utils import (
 )
 
 UPSTREAM_URL_SCHEMES = ("http://", "https://", "ftp://")
-RPM_HEADERS = ["description", "license", "sha256header", "sigmd5"]
 ARCHIVE_EXTENSIONS = (
     ".tar.gz",
     ".tgz",
