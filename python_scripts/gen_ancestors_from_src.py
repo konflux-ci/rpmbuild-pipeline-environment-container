@@ -430,10 +430,10 @@ def main():
         if os.path.exists(options.output_file):
             logging.warning("output file: %s already exists", options.output_file)
         logging.info("Writing RPM manifest to %s", options.output_file)
-        fp = open(options.output_file, "wt", encoding="utf-8")  # pylint: disable=R1732 consider-using-with
+        with open(options.output_file, "wt", encoding="utf-8") as fp:
+            json.dump(result, fp, indent=2, sort_keys=False)
     else:
-        fp = sys.stdout
-    json.dump(result, fp, indent=2, sort_keys=False)
+        json.dump(result, sys.stdout, indent=2, sort_keys=False)
 
 
 if __name__ == "__main__":
