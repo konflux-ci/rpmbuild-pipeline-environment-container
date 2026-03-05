@@ -48,7 +48,7 @@ def parse_spec_source_tags(specfile):
         spec = Specfile(specfile)
         sources_dict = {}
 
-        with spec.sources() as sources:
+        with spec.sources() as sources:  # pylint: disable=E1129
             for source in sources:
                 # Convert number to string for consistency with previous implementation
                 source_num = str(source.number)

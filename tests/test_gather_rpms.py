@@ -274,9 +274,8 @@ class TestHandleArchdirIntegration(unittest.TestCase):
             self, mock_listdir, mock_join, mock_prepare_koji_broot, _mock_pick_sbom, _mock_symlink):
         """Test that handle_archdir tracks RPMs and calls prepare_koji_broot."""
 
-        # Mock options
-        mock_options = MagicMock()
-        mock_options.pipeline_id = "test-pipeline-123"
+        arch = "x86_64"
+        pipeline_id = "test-pipeline-123"
 
         # Mock directory contents
         mock_listdir.return_value = [
@@ -295,7 +294,7 @@ class TestHandleArchdirIntegration(unittest.TestCase):
         mock_join.side_effect = join_side_effect
 
         # Call handle_archdir
-        handle_archdir(mock_options, "x86_64")
+        handle_archdir(arch, pipeline_id)
 
         # Verify prepare_koji_broot was called
         mock_prepare_koji_broot.assert_called_once_with(
