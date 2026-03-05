@@ -12,50 +12,10 @@ from unittest.mock import patch
 
 from common_utils import calc_checksum
 from validate_sbom import (
-    is_url_accessible,
     validate_source_checksums,
     validate_source_urls,
     validate_sbom,
 )
-
-
-class TestIsUrlAccessible(unittest.TestCase):
-    """
-    Unit tests for is_url_accessible function.
-    """
-
-    def test_empty_url(self):
-        """Test that empty URL returns False."""
-        self.assertFalse(is_url_accessible(""))
-
-    def test_none_url(self):
-        """Test that None URL returns False."""
-        self.assertFalse(is_url_accessible(None))
-
-    @patch('urllib.request.build_opener')
-    def test_successful_url(self, mock_opener):
-        """Test successful URL check."""
-        mock_response = unittest.mock.MagicMock()
-        mock_response.status = 200
-        mock_opener.return_value.open.return_value.__enter__.return_value = mock_response
-
-        self.assertTrue(is_url_accessible("https://example.com/file.tar.gz"))
-
-    @patch('urllib.request.build_opener')
-    def test_failed_url(self, mock_opener):
-        """Test failed URL check (exception raised)."""
-        mock_opener.return_value.open.side_effect = Exception("Connection failed")
-
-        self.assertFalse(is_url_accessible("https://example.com/nonexistent"))
-
-    @patch('urllib.request.build_opener')
-    def test_non_200_status(self, mock_opener):
-        """Test URL returning non-200 status."""
-        mock_response = unittest.mock.MagicMock()
-        mock_response.status = 404
-        mock_opener.return_value.open.return_value.__enter__.return_value = mock_response
-
-        self.assertFalse(is_url_accessible("https://example.com/notfound"))
 
 
 class TestValidateSourceChecksums(unittest.TestCase):

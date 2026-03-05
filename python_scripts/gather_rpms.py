@@ -1,6 +1,6 @@
 #!/usr/bin/python3
+"""Gather built RPMs, prepare staging directory and CG import metadata for Koji."""
 import datetime
-import hashlib
 import json
 import logging
 import os
@@ -8,6 +8,8 @@ from argparse import ArgumentParser
 import pprint
 
 import koji
+
+from common_utils import calc_checksum
 
 
 STAGING_DIR = "oras-staging"
@@ -52,7 +54,7 @@ def symlink(src, arch, prepend_arch=False):
     else:
         dst = os.path.join(STAGING_DIR, src)
         src = os.path.join('..', arch, src)
-    logging.debug(f"Symlinking {dst} -> {src}")
+    logging.debug("Symlinking %s -> %s", dst, src)
     os.symlink(src, dst)
 
 
@@ -111,7 +113,7 @@ def prepare_koji_broot(arch, pipeline_id, lockfile_path=None):
         buildroot['components'].append(component)
 
 
-def handle_archdir(options, arch):
+def handle_archdir(arch, pipeline_id):
     """Process architecture directory to collect RPMs."""
     # need to be global here as local scope is used otherwise
     global srpm  # pylint: disable=W0603 global-statement
@@ -157,7 +159,7 @@ def handle_archdir(options, arch):
             "lockfile": lockfile_path}
         logging.debug("(S)RPMs built in %s Buildroot:\n%s", arch, pprint.pformat(rpms, indent=2))
         logging.debug("Buildroot lockfile: %s", broot_arch_rpms[arch]["lockfile"])
-        prepare_koji_broot(arch, options.pipeline_id, lockfile_path=lockfile_path)
+        prepare_koji_broot(arch, pipeline_id, lockfile_path=lockfile_path)
     else:
         logging.warning("No (S)RPMs found in archdir %s", arch)
 
@@ -168,14 +170,15 @@ def create_broot_arch_rpms_file():
         json.dump(broot_arch_rpms, f, indent=2)
 
 
-def prepare_arch_data(options):
+def prepare_arch_data(cli_options):
+    """Process all architecture directories to collect RPMs."""
     # we're in results dir, so only archdirs should be present
     for arch in sorted(os.listdir()):
         if not os.path.isdir(arch):
             continue
         if arch == STAGING_DIR:
             continue
-        handle_archdir(options, arch)
+        handle_archdir(arch, cli_options.pipeline_id)
 
 
 def get_metadata():
@@ -191,8 +194,8 @@ def get_metadata():
 
 
 def generate_oras_filelist():
-    # generate oras filelists
-    with open('oras-push-list.txt', 'wt') as f:
+    """Generate ORAS push file list for artifact upload."""
+    with open('oras-push-list.txt', 'wt', encoding='utf-8') as f:
         f.write(f'{srpm}:application/x-rpm\n')
         for arch, arch_rpms in rpms.items():
             for rpm in arch_rpms:
@@ -204,28 +207,17 @@ def generate_oras_filelist():
         f.write(f'{CG_IMPORT_JSON}:application/json\n')
 
 
-def sha256sum(path: str):
-    checksum = hashlib.sha256()
-    with open(path, "rb") as f:
-        while True:
-            chunk = f.read(1024 ** 2)
-            if not chunk:
-                break
-            checksum.update(chunk)
-    return checksum.hexdigest()
-
-
-# create cg_import.json
-def create_md_file(options, extra_metadata=None):
+def create_md_file(cli_options, extra_metadata=None):
+    """Create CG import JSON metadata file."""
     path = os.path.join(STAGING_DIR, srpm)
     nevr = koji.get_header_fields(path, ['name', 'version', 'epoch', 'release'])
     extra = {
         "_export_source": {
             "source": "konflux",
-            "pipeline": options.pipeline_id,
+            "pipeline": cli_options.pipeline_id,
         },
         "source": {
-            "original_url": options.source_url,
+            "original_url": cli_options.source_url,
         },
         "typeinfo": {
             "rpm": {},
@@ -243,11 +235,11 @@ def create_md_file(options, extra_metadata=None):
         "version": nevr["version"],
         "release": nevr["release"],
         "epoch": nevr["epoch"],
-        "source": options.source_url,
+        "source": cli_options.source_url,
         "extra": extra,
-        "start_time": options.start_time,
-        "end_time": options.end_time,
-        "owner": options.owner,
+        "start_time": cli_options.start_time,
+        "end_time": cli_options.end_time,
+        "owner": cli_options.owner,
     }
 
     # create buildroot ids
@@ -269,13 +261,13 @@ def create_md_file(options, extra_metadata=None):
             'arch': nevra['arch'],
             'filesize': os.path.getsize(path),
             'checksum_type': 'sha256',
-            'checksum': sha256sum(path),
+            'checksum': calc_checksum(path, algorithm='sha256'),
             'type': 'rpm',
         })
 
     # arch rpms
-    for arch in rpms:
-        for rpm in rpms[arch]:
+    for arch, arch_rpms in rpms.items():
+        for rpm in arch_rpms:
             path = os.path.join(STAGING_DIR, rpm)
             nevra = koji.get_header_fields(path, ['name', 'version', 'release', 'epoch', 'arch'])
             output.append({
@@ -288,7 +280,7 @@ def create_md_file(options, extra_metadata=None):
                 'arch': nevra['arch'],
                 'filesize': os.path.getsize(path),
                 'checksum_type': 'sha256',
-                'checksum': sha256sum(path),
+                'checksum': calc_checksum(path, algorithm='sha256'),
                 'type': 'rpm',
             })
 
@@ -303,7 +295,7 @@ def create_md_file(options, extra_metadata=None):
             "filesize": os.path.getsize(path),
             "arch": "noarch",
             "checksum_type": "sha256",
-            "checksum": sha256sum(path),
+            "checksum": calc_checksum(path, algorithm='sha256'),
             "type": "log",
         })
 
@@ -314,12 +306,14 @@ def create_md_file(options, extra_metadata=None):
         "output": output,
     }
 
-    json.dump(md, open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt'), indent=2)
+    with open(os.path.join(STAGING_DIR, CG_IMPORT_JSON), 'wt', encoding='utf-8') as f:
+        json.dump(md, f, indent=2)
 
 
 def write_nvr():
+    """Write NVR (Name-Version-Release) to log file."""
     if srpm:
-        with open(NVR_FILE, "wt") as fo:
+        with open(NVR_FILE, "wt", encoding="utf-8") as fo:
             fo.write(srpm[:-8])
 
 
@@ -351,9 +345,8 @@ if __name__ == "__main__":
     logging.info("Createting buildroot arch (S)RPMs file")
     create_broot_arch_rpms_file()
     logging.info("Gathering extra metadata")
-    extra_metadata = get_metadata()
     logging.info("Creating md file")
-    create_md_file(options, extra_metadata)
+    create_md_file(options, get_metadata())
     logging.info("Generating oras filelist")
     generate_oras_filelist()
     write_nvr()

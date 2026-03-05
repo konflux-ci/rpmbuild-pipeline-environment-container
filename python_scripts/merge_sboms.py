@@ -620,7 +620,7 @@ def merge_sboms(
         # Extract SRPM name from the root SBOM document name
         # Format is typically: "package-name-version-release"
         # We want just the package name
-        srpm_name = root_sbom.get("name", "unknown").split("-")[0]
+        srpm_name = root_sbom.get("name", "unknown").rsplit("-", 2)[0]
         attach_buildroot_packages(root_sbom, broot_arch_list_file, srpm_name)
 
     # Add RPM SBOM packages if directory provided
