@@ -14,8 +14,8 @@ from unittest import TestCase
 
 import pytest
 
-from python_scripts.select_architectures import _main as select_architectures
-from python_scripts.select_architectures import get_arch_specific_tags
+from select_architectures import _main as select_architectures
+from select_architectures import get_arch_specific_tags
 
 SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
 
@@ -325,9 +325,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(testdir, "results.json")
         sys.argv = ["this", "--workdir", testdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(FileNotFoundError) as re:
             select_architectures()
-        self.assertEqual("no spec file available", str(re.exception))
+        self.assertIn("No specfile found", str(re.exception))
 
     def test_more_specfiles(self):
         """
@@ -341,11 +341,9 @@ class TestSelectArchitectures(TestCase):
         results = os.path.join(self.testdir, "results.json")
         sys.argv = ["this", "--workdir", self.workdir,
                     "--results-file", results] + SELECTED_ARCHES
-        with self.assertRaises(RuntimeError) as re:
+        with self.assertRaises(OSError) as re:
             select_architectures()
-        expected_err_message_1 = f"too many specfiles: {', '.join(sorted(specfiles_paths))}"
-        expected_err_message_2 = f"too many specfiles: {', '.join(sorted(specfiles_paths, reverse=True))}"
-        self.assertIn(str(re.exception), [expected_err_message_1, expected_err_message_2])
+        self.assertIn("Multiple specfiles found", str(re.exception))
 
     def test_unknown_macros(self):
         """
@@ -357,11 +355,10 @@ class TestSelectArchitectures(TestCase):
         sys.argv = ["this", "--workdir", self.workdir,
                     "--macro-overrides-file", overrides,
                     "--results-file", results] + SELECTED_ARCHES
-        result = select_architectures()
+        select_architectures()
         actual = self.capsys.readouterr()
         expected = "Unknown macros in"
         self.assertIn(expected, actual.out)
-        self.assertEqual(result, None)
 
     def test_spec_syntax_error(self):
         """

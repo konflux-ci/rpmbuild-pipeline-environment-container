@@ -1,0 +1,470 @@
+"""
+Tests for gen_ancestors_from_src.py.
+"""
+
+# pylint: disable=W0201,C0116
+
+import os
+import sys
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+from urllib.parse import urlparse
+
+# for the OS without dist-git-client
+# Mock dist_git_client before importing gen_ancestors_from_src
+sys.modules["dist_git_client"] = Mock()
+
+from gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
+    split_archive_filename,
+    parse_name_version,
+    get_repo_name,
+    parse_dist_git_sources,
+    list_spec_sources,
+    list_sources,
+    load_distgit_config,
+)
+
+
+class TestSplitArchiveFilename(unittest.TestCase):
+    """
+    Unit tests for split_archive_filename function.
+    """
+
+    def test_tar_gz_extension(self):
+        """Test splitting .tar.gz files."""
+        base, ext = split_archive_filename("package-1.0.tar.gz")
+        self.assertEqual(base, "package-1.0")
+        self.assertEqual(ext, ".tar.gz")
+
+    def test_tar_bz2_extension(self):
+        """Test splitting .tar.bz2 files."""
+        base, ext = split_archive_filename("package-2.1.tar.bz2")
+        self.assertEqual(base, "package-2.1")
+        self.assertEqual(ext, ".tar.bz2")
+
+    def test_zip_extension(self):
+        """Test splitting .zip files."""
+        base, ext = split_archive_filename("archive.zip")
+        self.assertEqual(base, "archive")
+        self.assertEqual(ext, ".zip")
+
+    def test_no_archive_extension(self):
+        """Test files without archive extensions."""
+        base, ext = split_archive_filename("README.txt")
+        self.assertEqual(base, "README.txt")
+        self.assertIsNone(ext)
+
+    def test_case_insensitive(self):
+        """Test case-insensitive extension matching."""
+        base, ext = split_archive_filename("Package-1.0.TAR.GZ")
+        self.assertEqual(base, "Package-1.0")
+        self.assertEqual(ext, ".TAR.GZ")
+
+
+class TestParseNameVersion(unittest.TestCase):
+    """
+    Unit tests for parse_name_version function.
+    """
+
+    def test_simple_name_version(self):
+        """Test parsing simple name-version format."""
+        name, version = parse_name_version("package-1.0")
+        self.assertEqual(name, "package")
+        self.assertEqual(version, "1.0")
+
+    def test_hyphenated_name(self):
+        """Test parsing hyphenated package names."""
+        name, version = parse_name_version("my-package-2.1.3")
+        self.assertEqual(name, "my-package")
+        self.assertEqual(version, "2.1.3")
+
+    def test_no_version(self):
+        """Test parsing filename without version."""
+        name, version = parse_name_version("package")
+        self.assertEqual(name, "package")
+        self.assertIsNone(version)
+
+    def test_complex_version(self):
+        """Test parsing complex version strings."""
+        name, version = parse_name_version("foo-bar-1.2.3-rc1")
+        self.assertEqual(name, "foo-bar-1.2.3")
+        self.assertEqual(version, "rc1")
+
+
+class TestGetRepoName(unittest.TestCase):
+    """
+    Unit tests for get_repo_name function.
+    """
+
+    def test_simple_repo_name(self):
+        """Test extracting repo name from simple path."""
+        url = urlparse("https://example.com/namespace/myrepo.git")
+        name = get_repo_name(url)
+        self.assertEqual(name, "myrepo")
+
+    def test_repo_without_git_extension(self):
+        """Test extracting repo name without .git extension."""
+        url = urlparse("https://example.com/namespace/myrepo")
+        name = get_repo_name(url)
+        self.assertEqual(name, "myrepo")
+
+    def test_nested_namespace(self):
+        """Test extracting repo name from nested namespace."""
+        url = urlparse("https://example.com/group/subgroup/myrepo.git")
+        name = get_repo_name(url)
+        self.assertEqual(name, "myrepo")
+
+    def test_trailing_slash(self):
+        """Test handling trailing slash in URL."""
+        url = urlparse("https://example.com/namespace/myrepo.git/")
+        name = get_repo_name(url)
+        self.assertEqual(name, "myrepo")
+
+
+class TestParseDistGitSources(unittest.TestCase):
+    """
+    Unit tests for parse_dist_git_sources function.
+    """
+
+    def test_missing_sources_file(self):
+        """Test that missing sources file returns empty dict."""
+        result = parse_dist_git_sources("/nonexistent/sources", "repo", {})
+        self.assertEqual(result, {})
+
+    def test_old_format(self):
+        """Test parsing old format: checksum filename."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("abc123 myfile.tar.gz\n")
+            sources_file = f.name
+
+        try:
+            config = {"default_sum": "md5"}
+            result = parse_dist_git_sources(sources_file, "repo", config)
+            self.assertIn("myfile.tar.gz", result)
+            self.assertEqual(result["myfile.tar.gz"]["alg"], "MD5")
+            self.assertEqual(result["myfile.tar.gz"]["checksum"], "abc123")
+            self.assertNotIn("url", result["myfile.tar.gz"])
+        finally:
+            os.unlink(sources_file)
+
+    def test_old_format_default_sum_fallback(self):
+        """Test old format uses md5 when default_sum is not in config."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("abc123 myfile.tar.gz\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertEqual(result["myfile.tar.gz"]["alg"], "MD5")
+        finally:
+            os.unlink(sources_file)
+
+    def test_new_format(self):
+        """Test parsing new format: HASHTYPE (filename) = checksum."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("SHA512 (myfile.tar.gz) = deadbeef123\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertIn("myfile.tar.gz", result)
+            self.assertEqual(result["myfile.tar.gz"]["alg"], "SHA512")
+            self.assertEqual(result["myfile.tar.gz"]["checksum"], "deadbeef123")
+        finally:
+            os.unlink(sources_file)
+
+    def test_skips_comments_and_blanks(self):
+        """Test that comments and blank lines are skipped."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("# this is a comment\n")
+            f.write("\n")
+            f.write("   \n")
+            f.write("abc123 real-file.tar.gz\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertEqual(len(result), 1)
+            self.assertIn("real-file.tar.gz", result)
+        finally:
+            os.unlink(sources_file)
+
+    def test_unexpected_format_skipped(self):
+        """Test that lines with unexpected format are skipped."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("one two three\n")  # 3 parts - unexpected
+            f.write("abc123 valid.tar.gz\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertEqual(len(result), 1)
+            self.assertIn("valid.tar.gz", result)
+        finally:
+            os.unlink(sources_file)
+
+    def test_lookaside_url_construction(self):
+        """Test lookaside URL is constructed when config has required keys."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("SHA512 (myfile.tar.gz) = deadbeef\n")
+            sources_file = f.name
+
+        try:
+            config = {
+                "lookaside_location": "https://lookaside.example.com",
+                "lookaside_uri_pattern": "repo/{name}/{filename}/{hashtype}/{hash}/{filename}",
+            }
+            result = parse_dist_git_sources(sources_file, "myrepo", config)
+            self.assertIn("url", result["myfile.tar.gz"])
+            url = result["myfile.tar.gz"]["url"]
+            self.assertIn("https://lookaside.example.com", url)
+            self.assertIn("myrepo", url)
+            self.assertIn("myfile.tar.gz", url)
+            self.assertIn("sha512", url)
+            self.assertIn("deadbeef", url)
+        finally:
+            os.unlink(sources_file)
+
+    def test_no_lookaside_url_without_config(self):
+        """Test no URL when lookaside config keys are missing."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("SHA512 (myfile.tar.gz) = deadbeef\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertNotIn("url", result["myfile.tar.gz"])
+        finally:
+            os.unlink(sources_file)
+
+    def test_multiple_sources(self):
+        """Test parsing multiple source entries."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='sources', delete=False) as f:
+            f.write("SHA256 (file1.tar.gz) = aaa111\n")
+            f.write("SHA256 (file2.tar.xz) = bbb222\n")
+            sources_file = f.name
+
+        try:
+            result = parse_dist_git_sources(sources_file, "repo", {})
+            self.assertEqual(len(result), 2)
+            self.assertIn("file1.tar.gz", result)
+            self.assertIn("file2.tar.xz", result)
+        finally:
+            os.unlink(sources_file)
+
+
+class TestListSpecSources(unittest.TestCase):
+    """
+    Unit tests for list_spec_sources function.
+    """
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_url_source_with_existing_file(self, _mock_checksum, mock_parse):
+        """Test source with HTTP URL and existing file."""
+        mock_parse.return_value = {
+            "0": "https://example.com/downloads/package-1.0.tar.gz"
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a dummy source file
+            source_path = os.path.join(tmpdir, "package-1.0.tar.gz")
+            with open(source_path, 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 1)
+        src = sources[0]
+        self.assertEqual(src["url"], "https://example.com/downloads/package-1.0.tar.gz")
+        self.assertEqual(src["filename"], "package-1.0.tar.gz")
+        self.assertEqual(src["name"], "package")
+        self.assertEqual(src["version"], "1.0")
+        self.assertEqual(src["alg"], "SHA256")
+        self.assertEqual(src["checksum"], "fakechecksum")
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    def test_url_source_with_missing_file(self, mock_parse):
+        """Test source with URL but missing file in srcdir."""
+        mock_parse.return_value = {
+            "0": "https://example.com/package-1.0.tar.gz"
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 1)
+        src = sources[0]
+        self.assertEqual(src["url"], "https://example.com/package-1.0.tar.gz")
+        self.assertNotIn("alg", src)
+        self.assertNotIn("checksum", src)
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    def test_local_source(self, mock_parse):
+        """Test source that is a local path (not a URL)."""
+        mock_parse.return_value = {"0": "local-patch.tar.gz"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 1)
+        src = sources[0]
+        self.assertIsNone(src["url"])
+        self.assertEqual(src["filename"], "local-patch.tar.gz")
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="abc123")
+    def test_url_with_fragment(self, _mock_checksum, mock_parse):
+        """Test URL with fragment (#) is handled correctly."""
+        mock_parse.return_value = {
+            "0": "https://example.com/pkg-2.0.tar.gz#/renamed.tar.gz"
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "pkg-2.0.tar.gz")
+            with open(source_path, 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(sources[0]["filename"], "pkg-2.0.tar.gz")
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    def test_multiple_sources(self, mock_parse):
+        """Test multiple source entries from spec."""
+        mock_parse.return_value = {
+            "0": "https://example.com/main-1.0.tar.gz",
+            "1": "extra-data.txt",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 2)
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    def test_ftp_source(self, mock_parse):
+        """Test source with FTP URL."""
+        mock_parse.return_value = {
+            "0": "ftp://ftp.example.com/pub/package-3.0.tar.bz2"
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        src = sources[0]
+        self.assertEqual(src["url"], "ftp://ftp.example.com/pub/package-3.0.tar.bz2")
+        self.assertEqual(src["filename"], "package-3.0.tar.bz2")
+
+
+class TestListSources(unittest.TestCase):
+    """
+    Unit tests for list_sources function.
+    """
+
+    @patch("gen_ancestors_from_src.parse_dist_git_sources")
+    @patch("gen_ancestors_from_src.list_spec_sources")
+    def test_midstream_info_added(self, mock_list_spec, mock_parse_dg):
+        """Test that midstream info is merged into spec sources."""
+        mock_list_spec.return_value = [
+            {"filename": "pkg-1.0.tar.gz", "url": "https://example.com/pkg-1.0.tar.gz",
+             "name": "pkg", "version": "1.0"},
+        ]
+        mock_parse_dg.return_value = {
+            "pkg-1.0.tar.gz": {"alg": "SHA512", "checksum": "abc123"},
+        }
+        config = {"sources_file": "sources"}
+        sources = list_sources("fake.spec", "/srcdir", "myrepo", config)
+
+        self.assertEqual(len(sources), 1)
+        self.assertIn("midstream", sources[0])
+        self.assertEqual(sources[0]["midstream"]["alg"], "SHA512")
+        self.assertEqual(sources[0]["midstream"]["checksum"], "abc123")
+
+    @patch("gen_ancestors_from_src.parse_dist_git_sources")
+    @patch("gen_ancestors_from_src.list_spec_sources")
+    def test_no_midstream_when_not_in_sources(self, mock_list_spec, mock_parse_dg):
+        """Test that sources without midstream entry have no midstream key."""
+        mock_list_spec.return_value = [
+            {"filename": "other.tar.gz", "url": None, "name": "other", "version": "1.0"},
+        ]
+        mock_parse_dg.return_value = {
+            "pkg-1.0.tar.gz": {"alg": "SHA512", "checksum": "abc123"},
+        }
+        config = {"sources_file": "sources"}
+        sources = list_sources("fake.spec", "/srcdir", "myrepo", config)
+
+        self.assertNotIn("midstream", sources[0])
+
+    @patch("gen_ancestors_from_src.parse_dist_git_sources")
+    @patch("gen_ancestors_from_src.list_spec_sources")
+    def test_sources_file_template_formatting(self, mock_list_spec, mock_parse_dg):
+        """Test that sources_file template is formatted with repo name."""
+        mock_list_spec.return_value = []
+        mock_parse_dg.return_value = {}
+        config = {"sources_file": ".{name}.metadata"}
+        list_sources("fake.spec", "/srcdir", "myrepo", config)
+
+        # Verify parse_dist_git_sources was called with the formatted path
+        call_args = mock_parse_dg.call_args
+        sources_file_arg = call_args[0][0]
+        self.assertEqual(sources_file_arg, "/srcdir/.myrepo.metadata")
+
+    @patch("gen_ancestors_from_src.parse_dist_git_sources")
+    @patch("gen_ancestors_from_src.list_spec_sources")
+    def test_default_sources_file(self, mock_list_spec, mock_parse_dg):
+        """Test default sources filename when not in config."""
+        mock_list_spec.return_value = []
+        mock_parse_dg.return_value = {}
+        list_sources("fake.spec", "/srcdir", "myrepo", {})
+
+        call_args = mock_parse_dg.call_args
+        sources_file_arg = call_args[0][0]
+        self.assertEqual(sources_file_arg, "/srcdir/sources")
+
+
+class TestLoadDistgitConfig(unittest.TestCase):
+    """
+    Unit tests for load_distgit_config function.
+    """
+
+    @patch("gen_ancestors_from_src.get_distgit_config")
+    @patch("gen_ancestors_from_src.load_dist_git_config")
+    def test_restores_cwd(self, mock_load, mock_get):
+        """Test that original working directory is restored."""
+        mock_load.return_value = {"section": {}}
+        mock_url = urlparse("https://example.com/repo.git")
+        mock_get.return_value = (mock_url, {"key": "val"})
+
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            load_distgit_config(tmpdir, "/etc/dist-git-client")
+
+        self.assertEqual(os.getcwd(), original_cwd)
+
+    @patch("gen_ancestors_from_src.get_distgit_config")
+    @patch("gen_ancestors_from_src.load_dist_git_config")
+    def test_restores_cwd_on_error(self, mock_load, _mock_get):
+        """Test that original cwd is restored even on error."""
+        mock_load.side_effect = RuntimeError("config error")
+
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(RuntimeError):
+                load_distgit_config(tmpdir, "/etc/dist-git-client")
+
+        self.assertEqual(os.getcwd(), original_cwd)
+
+    @patch("gen_ancestors_from_src.get_distgit_config")
+    @patch("gen_ancestors_from_src.load_dist_git_config")
+    def test_returns_parsed_url_and_config(self, mock_load, mock_get):
+        """Test return value is (parsed_url, distgit_config)."""
+        mock_load.return_value = {"section": {}}
+        mock_url = urlparse("https://example.com/ns/repo.git")
+        expected_config = {"lookaside_location": "https://lookaside.example.com"}
+        mock_get.return_value = (mock_url, expected_config)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parsed_url, config = load_distgit_config(tmpdir, "/etc/dist-git-client")
+
+        self.assertEqual(parsed_url, mock_url)
+        self.assertEqual(config, expected_config)
+
+
+if __name__ == "__main__":
+    unittest.main()
