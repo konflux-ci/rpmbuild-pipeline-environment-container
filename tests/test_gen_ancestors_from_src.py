@@ -4,6 +4,7 @@ Tests for gen_ancestors_from_src.py.
 
 # pylint: disable=W0201,C0116
 
+import json
 import os
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from gen_ancestors_from_src import (  # pylint: disable=C0413  # noqa: E402
     list_spec_sources,
     list_sources,
     load_distgit_config,
+    main,
 )
 
 
@@ -315,30 +317,41 @@ class TestListSpecSources(unittest.TestCase):
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
     def test_url_source_with_missing_file(self, mock_parse):
-        """Test source with URL but missing file in srcdir."""
+        """Test source with URL but missing file raises FileNotFoundError."""
         mock_parse.return_value = {
             "0": "https://example.com/package-1.0.tar.gz"
         }
         with tempfile.TemporaryDirectory() as tmpdir:
-            sources = list_spec_sources("fake.spec", tmpdir)
-
-        self.assertEqual(len(sources), 1)
-        src = sources[0]
-        self.assertEqual(src["url"], "https://example.com/package-1.0.tar.gz")
-        self.assertNotIn("alg", src)
-        self.assertNotIn("checksum", src)
+            with self.assertRaises(FileNotFoundError) as ctx:
+                list_spec_sources("fake.spec", tmpdir)
+            self.assertIn("package-1.0.tar.gz", str(ctx.exception))
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
-    def test_local_source(self, mock_parse):
-        """Test source that is a local path (not a URL)."""
+    def test_local_source_missing_file(self, mock_parse):
+        """Test local source with missing file raises FileNotFoundError."""
         mock_parse.return_value = {"0": "local-patch.tar.gz"}
         with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(FileNotFoundError) as ctx:
+                list_spec_sources("fake.spec", tmpdir)
+            self.assertIn("local-patch.tar.gz", str(ctx.exception))
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_local_source_existing_file(self, _mock_checksum, mock_parse):
+        """Test local source with existing file (not a URL)."""
+        mock_parse.return_value = {"0": "local-patch.tar.gz"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "local-patch.tar.gz")
+            with open(source_path, 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
             sources = list_spec_sources("fake.spec", tmpdir)
 
         self.assertEqual(len(sources), 1)
         src = sources[0]
         self.assertIsNone(src["url"])
         self.assertEqual(src["filename"], "local-patch.tar.gz")
+        self.assertEqual(src["checksum"], "fakechecksum")
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
     @patch("gen_ancestors_from_src.calc_checksum", return_value="abc123")
@@ -357,24 +370,34 @@ class TestListSpecSources(unittest.TestCase):
         self.assertEqual(sources[0]["filename"], "pkg-2.0.tar.gz")
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
-    def test_multiple_sources(self, mock_parse):
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_multiple_sources(self, _mock_checksum, mock_parse):
         """Test multiple source entries from spec."""
         mock_parse.return_value = {
             "0": "https://example.com/main-1.0.tar.gz",
             "1": "extra-data.txt",
         }
         with tempfile.TemporaryDirectory() as tmpdir:
+            # Create dummy source files
+            for name in ["main-1.0.tar.gz", "extra-data.txt"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding="utf-8") as f:
+                    f.write("dummy")
+
             sources = list_spec_sources("fake.spec", tmpdir)
 
         self.assertEqual(len(sources), 2)
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
-    def test_ftp_source(self, mock_parse):
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_ftp_source(self, _mock_checksum, mock_parse):
         """Test source with FTP URL."""
         mock_parse.return_value = {
             "0": "ftp://ftp.example.com/pub/package-3.0.tar.bz2"
         }
         with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "package-3.0.tar.bz2"), 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
             sources = list_spec_sources("fake.spec", tmpdir)
 
         src = sources[0]
@@ -494,6 +517,149 @@ class TestLoadDistgitConfig(unittest.TestCase):
 
         self.assertEqual(parsed_url, mock_url)
         self.assertEqual(config, expected_config)
+
+
+class TestMain(unittest.TestCase):
+    """
+    Unit tests for main function.
+    """
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_output_to_file(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test main writes JSON output to file."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {"sources_file": "sources"})
+        mock_list_sources.return_value = [
+            {"url": "https://example.com/pkg-1.0.tar.gz", "name": "pkg",
+             "version": "1.0", "filename": "pkg-1.0.tar.gz",
+             "alg": "SHA256", "checksum": "abc123"}
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = os.path.join(tmpdir, "output.json")
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "-o", output_file,
+                         "--dist-git-config-dir", "/tmp"]
+            main()
+
+            self.assertTrue(os.path.exists(output_file))
+            with open(output_file, 'r', encoding='utf-8') as f:
+                result = json.load(f)
+            self.assertIn("sources", result)
+            self.assertEqual(len(result["sources"]), 1)
+            self.assertEqual(result["sources"][0]["name"], "pkg")
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_output_to_stdout(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test main writes JSON output to stdout when no output file."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--dist-git-config-dir", "/tmp"]
+            with patch("sys.stdout") as mock_stdout:
+                main()
+                mock_stdout.write.assert_called()
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_provided_specfile(self, mock_load_config, mock_list_sources):
+        """Test main uses --specfile when provided."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            specfile = os.path.join(tmpdir, "test.spec")
+            with open(specfile, 'w', encoding='utf-8') as f:
+                f.write("Name: test\n")
+
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--specfile", specfile,
+                         "--dist-git-config-dir", "/tmp"]
+            with patch("sys.stdout"):
+                main()
+
+            # Verify list_sources was called with the provided specfile
+            call_args = mock_list_sources.call_args
+            self.assertEqual(call_args[0][0], os.path.abspath(specfile))
+
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_nonexistent_specfile_raises(self, mock_load_config):
+        """Test main raises ValueError for nonexistent --specfile."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--specfile", "/nonexistent/test.spec",
+                         "--dist-git-config-dir", "/tmp"]
+            with self.assertRaises(ValueError) as ctx:
+                main()
+            self.assertIn("does not exist", str(ctx.exception))
+
+    def test_nonexistent_source_dir_raises(self):
+        """Test main raises ValueError for nonexistent source directory."""
+        sys.argv = ["gen_ancestors_from_src",
+                     "-s", "/nonexistent/dir",
+                     "--dist-git-config-dir", "/tmp"]
+        with self.assertRaises(ValueError) as ctx:
+            main()
+        self.assertIn("does not exist", str(ctx.exception))
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_dist_git_config_env_fallback(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test main uses COPR_DISTGIT_CLIENT_CONFDIR env var fallback."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src", "-s", tmpdir]
+            with patch.dict(os.environ, {"COPR_DISTGIT_CLIENT_CONFDIR": "/custom/config"}):
+                with patch("sys.stdout"):
+                    main()
+
+            # Verify load_distgit_config was called with the env var path
+            call_args = mock_load_config.call_args
+            self.assertEqual(call_args[0][1], "/custom/config")
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_overwrite_existing_output(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test main overwrites existing output file with warning."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = [{"name": "new"}]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = os.path.join(tmpdir, "output.json")
+            # Create pre-existing file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump({"sources": [{"name": "old"}]}, f)
+
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "-o", output_file,
+                         "--dist-git-config-dir", "/tmp"]
+            main()
+
+            with open(output_file, 'r', encoding='utf-8') as f:
+                result = json.load(f)
+            self.assertEqual(result["sources"][0]["name"], "new")
 
 
 if __name__ == "__main__":

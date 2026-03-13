@@ -282,7 +282,7 @@ def list_spec_sources(specfile, srcdir=".", database=None, target_dist=None):
             src_entry["alg"] = "SHA256"
             src_entry["checksum"] = calc_checksum(fp, algorithm="sha256")
         else:
-            logging.error("%s: %s doesn't exist in srcdir: %s", source_tag, sfn, srcdir)
+            raise FileNotFoundError(f"{source_tag}: {sfn} doesn't exist in srcdir: {srcdir}")
         logging.debug("%s info: %s", source_tag, src_entry)
         sources.append(src_entry)
 
