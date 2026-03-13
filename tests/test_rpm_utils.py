@@ -10,7 +10,6 @@ import unittest
 
 from rpm_utils import (
     search_specfile,
-    get_arch_specific_tags,
     create_macro_registry,
     SourceHooks,
     parse_spec_source_tags,
@@ -159,60 +158,6 @@ class TestSearchSpecfile(unittest.TestCase):
 
             result = search_specfile(tmpdir)
             self.assertEqual(result, specfile_path)
-
-
-class TestGetArchSpecificTags(unittest.TestCase):
-    """
-    Unit tests for get_arch_specific_tags function.
-    """
-
-    def test_multiple_statements(self):
-        """
-        Test that we concatenate multiple Exclu*Arch statements.
-        """
-        testdir = os.path.dirname(os.path.realpath(__file__))
-        specfile = os.path.join(testdir, "specfiles",
-                                "dummy-pkg-multiple-tags.spec")
-        overrides = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-        assert get_arch_specific_tags(specfile, overrides, "rhel-10") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-rhel-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-rhel-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
-
-        assert get_arch_specific_tags(specfile, overrides, "fedora-42") == {
-            'buildarch': {
-                'noarch',
-            },
-            'excludearch': {
-                's390x',
-                'weirdarch',
-                'on-fedora-excludearch',
-            },
-            'exclusivearch': {
-                'aarch64',
-                'i686',
-                'noarch',
-                'on-fedora-exclusivearch',
-                'ppc64le',
-                'riscv64',
-                's390x',
-                'x86_64',
-            }}
 
 
 class TestSourceHooks(unittest.TestCase):

@@ -5,12 +5,10 @@ import json
 import os
 import random
 
-from norpm.macrofile import system_macro_registry
 from norpm.specfile import specfile_expand, ParserHooks
-from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
 
-from rpm_utils import search_specfile
+from rpm_utils import create_macro_registry, search_specfile
 
 
 WORKDIR = '/var/workdir/source'
@@ -110,12 +108,13 @@ def get_arch_specific_tags(specfile, database, target_distribution):
     ExcludeArch and BuildArch statements.  Return a dictionary with
     `<tagname>: set()` where tagname is .tolower().
     """
-    registry = system_macro_registry()
-    registry = override_macro_registry(registry, database, target_distribution)
+    registry = create_macro_registry(
     # %dist contains %lua mess, it's safer to clear it (we don't need it)
-    registry["dist"] = ""
-    # norpm maintains a few useful tricks to ease the spec file parsing
-    registry.known_norpm_hacks()
+    macro_overrides={
+        "dist": ""
+    },
+    database=database, target_distribution=target_distribution)
+
     tags = TagHooks()
     try:
         with open(specfile, "r", encoding="utf8") as fd:
