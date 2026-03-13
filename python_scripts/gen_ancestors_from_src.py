@@ -220,24 +220,20 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config):
     return sources_map
 
 
-def list_spec_sources(specfile, srcdir=".", database=None, target_dist=None):
+def list_spec_sources(specfile, srcdir="."):
     """List sources from specfile using python-norpm.
 
     :param specfile: Path to the specfile
     :type specfile: str
     :param srcdir: Source directory containing the archives
     :type srcdir: str
-    :param database: Optional path to JSON file with RPM macro overrides
-    :type database: str or None
-    :param target_dist: Optional target distribution (e.g., 'fedora-rawhide', 'rhel-10')
-    :type target_dist: str or None
     :returns: List of source dictionaries
     :rtype: list
     """
     sources = []
 
     # Parse spec file to get Source tags
-    source_tags = parse_spec_source_tags(specfile, srcdir, database, target_dist)
+    source_tags = parse_spec_source_tags(specfile, srcdir)
 
     # Process captured sources
     for source_num, loc in source_tags.items():
@@ -307,7 +303,7 @@ def get_repo_name(remote_url):
     return repo_name
 
 
-def list_sources(specfile, srcdir, repo_name, distgit_config, *, database=None, target_dist=None):
+def list_sources(specfile, srcdir, repo_name, distgit_config):
     """List sources with midstream information from dist-git sources file.
 
     Combines spec sources from rpmdev-spectool with midstream checksums
@@ -321,15 +317,11 @@ def list_sources(specfile, srcdir, repo_name, distgit_config, *, database=None, 
     :type repo_name: str
     :param distgit_config: Dist-git instance configuration
     :type distgit_config: dict
-    :param database: Optional path to JSON file with RPM macro overrides (keyword-only)
-    :type database: str or None
-    :param target_dist: Optional targetdistribution (e.g., 'fedora-rawhide', 'rhel-10') (keyword-only)
-    :type target_dist: str or None
     :returns: List of source dictionaries with midstream property
     :rtype: list
     """
     # Get sources from specfile
-    sources = list_spec_sources(specfile, srcdir, database, target_dist)
+    sources = list_spec_sources(specfile, srcdir)
 
     # Get sources file path from dist-git config
     sources_file_template = distgit_config.get("sources_file", "sources")
@@ -372,19 +364,6 @@ def main():
         help="Path to dist-git-client config directory (default: $COPR_DISTGIT_CLIENT_CONFDIR or /etc/dist-git-client)",
     )
     parser.add_argument(
-        "--macro-overrides-file",
-        action="store",
-        default="/etc/arch-specific-macro-overrides.json",
-        help="JSON file with RPM macro overrides",
-    )
-    parser.add_argument(
-        "--target-distribution",
-        default="fedora-rawhide",
-        help=("Select the distribution version we build for, e.g., 'rhel-10'. "
-              "The default is 'fedora-rawhide'. This option affects how "
-              "some macros in given specfile are expanded."),
-    )
-    parser.add_argument(
         "--specfile",
         action="store",
         help="Path to specfile, mainly used when the expanded specfile is provided by mock, "
@@ -420,11 +399,7 @@ def main():
         specfile = search_specfile(src_dir)
         logging.info("Specfile found: %s", specfile)
 
-    sources = list_sources(
-        specfile, src_dir, repo_name, distgit_config,
-        database=options.macro_overrides_file,
-        target_dist=options.target_distribution,
-    )
+    sources = list_sources(specfile, src_dir, repo_name, distgit_config)
     result = {"sources": sources}
     if options.output_file:
         if os.path.exists(options.output_file):

@@ -95,25 +95,19 @@ class SourceHooks(ParserHooks):
             self.sources[source_num] = value
 
 
-def parse_spec_source_tags(specfile, srcdir=".", database=None, target_distribution=None):
+def parse_spec_source_tags(specfile, srcdir="."):
     """Parse Source tags from specfile using SourceHooks.
 
     :param specfile: Path to the specfile
     :type specfile: str
     :param srcdir: Source directory for resolving filenames
     :type srcdir: str
-    :param database: Optional path to JSON file with RPM macro overrides
-    :type database: str or None
-    :param target_distribution: Optional target distribution (e.g., 'fedora-rawhide', 'rhel-10')
-    :type target_distribution: str or None
     :returns: Dictionary mapping source number to location (e.g., {"0": "https://...", "1": "patch.tar.gz"})
     :rtype: dict
     """
     # Set up macro registry with _sourcedir macro
     registry = create_macro_registry(
         macro_overrides={"_sourcedir": srcdir},
-        database=database,
-        target_distribution=target_distribution,
     )
 
     # Parse spec file with SourceHooks

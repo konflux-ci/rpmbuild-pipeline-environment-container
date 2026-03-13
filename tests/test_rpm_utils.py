@@ -277,16 +277,8 @@ Test package
             with open(spec_path, "w", encoding="utf-8") as f:
                 f.write(spec_content)
 
-            testdir = os.path.dirname(os.path.realpath(__file__))
-            overrides_file = os.path.join(testdir, "..", "arch-specific-macro-overrides.json")
-
-            if os.path.exists(overrides_file):
-                source_tags = parse_spec_source_tags(
-                    spec_path, tmpdir,
-                    database=overrides_file,
-                    target_distribution="fedora-rawhide"
-                )
-                self.assertGreaterEqual(len(source_tags), 0)
+            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            self.assertGreaterEqual(len(source_tags), 0)
 
 
 if __name__ == "__main__":
