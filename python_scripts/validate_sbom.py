@@ -62,10 +62,12 @@ def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):
     """
     checksum_verify = checksum_verify and bool(source_dir)
     results = {
-        'total_sources_with_checksums': 0,
+        'no_checksum_sources': 0,
+        'no_package_filename_sources': 0,
+        'missing_files': 0,
         'verified_checksums': 0,
         'mismatched_checksums': 0,
-        'missing_files': 0,
+        'invalid_checksum_entries': 0,
         'failed_checksums': [],
         'checksum_verify': checksum_verify,
     }
@@ -80,23 +82,41 @@ def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):
 
         # Check if this is a source package
         if not spdx_id.startswith('SPDXRef-Source'):
+            logging.debug("Skipping non-source package: %s (%s)", spdx_id, pkg.get('name'))
             continue
 
         checksums = pkg.get('checksums', [])
         if not checksums:
+            results['no_checksum_sources'] += 1
+            results['failed_checksums'].append({
+                'spdx_id': spdx_id,
+                'name': pkg.get('name'),
+                'reason': 'No checksums provided',
+            })
+            logging.warning("No checksums for %s (%s)", spdx_id, pkg.get('name'))
             continue
-
-        results['total_sources_with_checksums'] += 1
 
         package_filename = pkg.get('packageFileName', '')
         if not package_filename:
-            logging.debug("No packageFileName for %s, skipping checksum validation", spdx_id)
+            results['no_package_filename_sources'] += 1
+            results['failed_checksums'].append({
+                'spdx_id': spdx_id,
+                'name': pkg.get('name'),
+                'reason': 'missing property: "packageFileName"',
+            })
+            logging.warning("No packageFileName for %s, skipping checksum validation", spdx_id)
             continue
 
         # Try to find the file in source directory
         filepath = os.path.join(source_dir, package_filename)
         if not os.path.isfile(filepath):
             results['missing_files'] += 1
+            results['failed_checksums'].append({
+                'spdx_id': spdx_id,
+                'name': pkg.get('name'),
+                'filename': package_filename,
+                'reason': f'file: {package_filename} not found in source directory: {source_dir}',
+            })
             logging.debug("File not found for checksum validation: %s", filepath)
             continue
 
@@ -106,6 +126,20 @@ def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):
             expected_checksum = checksum_entry.get('checksumValue', '')
 
             if not algorithm or not expected_checksum:
+                results['invalid_checksum_entries'] += 1
+                results["failed_checksums"].append(
+                    {
+                        "spdx_id": spdx_id,
+                        "name": pkg.get("name"),
+                        "filename": package_filename,
+                        "reason": f"Invalid checksum entry (algorithm or checksumValue missing): {checksum_entry}",
+                    }
+                )
+                logging.warning(
+                    "Invalid Checksum (Algorithm or checksumValue missing) for %s: %s",
+                    spdx_id,
+                    checksum_entry,
+                )
                 continue
 
             try:
@@ -126,7 +160,12 @@ def validate_source_checksums(sbom_data, source_dir, checksum_verify=True):
                         'filename': package_filename,
                         'algorithm': algorithm,
                         'expected': expected_checksum,
-                        'actual': actual_checksum
+                        'actual': actual_checksum,
+                        'reason': 'Checksum mismatch\n'
+                            f'        File: {package_filename}'
+                            f'        Algorithm: {algorithm}'
+                            f'        Expected: {expected_checksum}'
+                            f'        Actual: {actual_checksum}',
                     })
                     logging.warning(
                         "✗ Checksum mismatch for %s: expected=%s, actual=%s (algorithm: %s)",
@@ -208,6 +247,10 @@ def _print_validation_summary(url_results, checksum_results):
     print("SBOM Validation Summary")
     print("=" * 60)
     print(f"Total source packages: {url_results['total_sources']}")
+    if url_results['total_sources'] == 0:
+        print("⚠WARNING: No source archive/file found in SBOM. "
+              "Please ensure specfile and source information are correctly specified.")
+        return True
     print(f"Sources with URLs: {url_results['sources_with_urls']}")
 
     if url_results['url_verify']:
@@ -222,23 +265,24 @@ def _print_validation_summary(url_results, checksum_results):
 
     if checksum_results['checksum_verify']:
         print("\nChecksum Validation:")
-        print(f"Sources with checksums: {checksum_results['total_sources_with_checksums']}")
         print(f"Verified checksums: {checksum_results['verified_checksums']}")
         print(f"Mismatched checksums: {checksum_results['mismatched_checksums']}")
+        print(f"Sources without checksums: {checksum_results['no_checksum_sources']}")
+        print(f"Sources without packageFileName: {checksum_results['no_package_filename_sources']}")
+        print(f"Invalid checksum entries (algorithm or checksumValue missing): "
+              f"{checksum_results['invalid_checksum_entries']}")
         print(f"Missing files: {checksum_results['missing_files']}")
 
         if checksum_results['failed_checksums']:
             print("\nFailed Checksum Checks:")
             for failure in checksum_results['failed_checksums']:
                 print(f"  - {failure['spdx_id']} ({failure['name']})")
-                print(f"    File: {failure['filename']}")
-                print(f"    Algorithm: {failure['algorithm']}")
-                print(f"    Expected: {failure['expected']}")
-                print(f"    Actual:   {failure['actual']}")
+                print(f"    Reason: {failure.get('reason', 'unknown')}")
 
     # Determine overall validation result
     validation_passed = not (
-        url_results["inaccessible_urls"] or checksum_results["mismatched_checksums"]
+        url_results["inaccessible_urls"]
+        or checksum_results["failed_checksums"]
     )
 
     if validation_passed:
