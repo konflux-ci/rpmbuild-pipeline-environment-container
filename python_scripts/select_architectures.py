@@ -1,15 +1,14 @@
 #! /usr/bin/python3
 
 import argparse
-import glob
 import json
 import os
 import random
 
-from norpm.macrofile import system_macro_registry
 from norpm.specfile import specfile_expand, ParserHooks
-from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
+
+from rpm_utils import create_macro_registry, search_specfile
 
 
 WORKDIR = '/var/workdir/source'
@@ -30,21 +29,6 @@ def get_arches(name, tags):
         print(f"Unknown macros in {name_map[name]}: {unknown}")
         return set()
     return set(values)
-
-
-def get_specfile(workdir=WORKDIR):
-    """
-    Find & return the specfile path in given WORKDIR.
-    """
-    specfile_path = glob.glob(os.path.join(workdir, '*.spec'))
-
-    if len(specfile_path) == 0:
-        raise RuntimeError("no spec file available")
-
-    if len(specfile_path) > 1:
-        raise RuntimeError(f"too many specfiles: {', '.join(specfile_path)}")
-
-    return specfile_path[0]
 
 
 def apply_platform_overrides(platform_labels, architecture_decision):
@@ -124,12 +108,13 @@ def get_arch_specific_tags(specfile, database, target_distribution):
     ExcludeArch and BuildArch statements.  Return a dictionary with
     `<tagname>: set()` where tagname is .tolower().
     """
-    registry = system_macro_registry()
-    registry = override_macro_registry(registry, database, target_distribution)
+    registry = create_macro_registry(
     # %dist contains %lua mess, it's safer to clear it (we don't need it)
-    registry["dist"] = ""
-    # norpm maintains a few useful tricks to ease the spec file parsing
-    registry.known_norpm_hacks()
+    macro_overrides={
+        "dist": ""
+    },
+    database=database, target_distribution=target_distribution)
+
     tags = TagHooks()
     try:
         with open(specfile, "r", encoding="utf8") as fd:
@@ -154,7 +139,7 @@ def _main():
     allowed_architectures = set(args.selected_architectures)
     print(f"Trying to build for {allowed_architectures}")
 
-    spec = get_specfile(args.workdir)
+    spec = search_specfile(args.workdir)
     arches = get_arch_specific_tags(spec, args.macro_overrides_file,
                                     args.target_distribution)
     architecture_decision = {
