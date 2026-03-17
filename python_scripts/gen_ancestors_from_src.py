@@ -304,10 +304,7 @@ def get_repo_name(remote_url):
 
 
 def list_sources(specfile, srcdir, repo_name, distgit_config):
-    """List sources with midstream information from dist-git sources file.
-
-    Combines spec sources from rpmdev-spectool with midstream checksums
-    from the dist-git sources file.
+    """List and combine sources (SourceN from specfile) with midstreams (dist-git sources file)
 
     :param specfile: Path to the specfile
     :type specfile: str
