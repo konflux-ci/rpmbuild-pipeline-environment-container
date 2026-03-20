@@ -488,6 +488,36 @@ class TestLoadDistgitConfig(unittest.TestCase):
         self.assertEqual(parsed_url, mock_url)
         self.assertEqual(config, expected_config)
 
+    @patch("gen_ancestors_from_src.get_distgit_config")
+    @patch("gen_ancestors_from_src.load_dist_git_config")
+    def test_forked_from_to_get_distgit_cfg(self, mock_load, mock_get):
+        """Test that forked_from is forwarded to get_distgit_config."""
+        mock_load.return_value = {"section": {}}
+        mock_url = urlparse("https://src.fedoraproject.org/rpms/coreutils.git")
+        mock_get.return_value = (mock_url, {})
+        forked_from_url = "https://src.fedoraproject.org/rpms/coreutils.git"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            load_distgit_config(tmpdir, "/etc/dist-git-client", forked_from=forked_from_url)
+
+        mock_get.assert_called_once()
+        _, kwargs = mock_get.call_args
+        self.assertEqual(kwargs["forked_from"], forked_from_url)
+
+    @patch("gen_ancestors_from_src.get_distgit_config")
+    @patch("gen_ancestors_from_src.load_dist_git_config")
+    def test_forked_from_none_by_default(self, mock_load, mock_get):
+        """Test that forked_from defaults to None."""
+        mock_load.return_value = {"section": {}}
+        mock_url = urlparse("https://example.com/ns/repo.git")
+        mock_get.return_value = (mock_url, {})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            load_distgit_config(tmpdir, "/etc/dist-git-client")
+
+        _, kwargs = mock_get.call_args
+        self.assertIsNone(kwargs["forked_from"])
+
 
 class TestMain(unittest.TestCase):
     """
@@ -605,6 +635,46 @@ class TestMain(unittest.TestCase):
             # Verify load_distgit_config was called with the env var path
             call_args = mock_load_config.call_args
             self.assertEqual(call_args[0][1], "/custom/config")
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_forked_from_to_load_distgit_cfg(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test --forked-from CLI arg is passed to load_distgit_config."""
+        mock_url = urlparse("https://src.fedoraproject.org/rpms/coreutils.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+        forked_from_url = "https://src.fedoraproject.org/rpms/coreutils.git"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--dist-git-config-dir", "/tmp",
+                         "--forked-from", forked_from_url]
+            with patch("sys.stdout"):
+                main()
+
+            _, kwargs = mock_load_config.call_args
+            self.assertEqual(kwargs["forked_from"], forked_from_url)
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_forked_from_default_none(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test --forked-from defaults to None when not provided."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--dist-git-config-dir", "/tmp"]
+            with patch("sys.stdout"):
+                main()
+
+            _, kwargs = mock_load_config.call_args
+            self.assertIsNone(kwargs["forked_from"])
 
     @patch("gen_ancestors_from_src.list_sources")
     @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
