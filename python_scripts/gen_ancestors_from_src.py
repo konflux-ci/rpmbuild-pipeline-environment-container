@@ -87,15 +87,28 @@ def parse_name_version(basename):
     return sname, sver
 
 
-def load_distgit_config(srcdir, dist_git_config_dir):
+def load_distgit_config(srcdir, dist_git_config_dir, forked_from=None):
     """Load dist-git configuration for the given source directory.
 
-    Changes to srcdir to detect git remote URL for correct config section.
+    When forked_from is provided, it is used directly to look up the
+    dist-git instance configuration (via the ``forked_from`` parameter of
+    ``get_distgit_config``).  This is needed when the source repository is
+    a fork — the upstream (forked-from) URL determines the correct
+    lookaside cache configuration.  It also avoids the need for
+    ``.git/config`` in the source directory, which is useful when
+    ``.git`` has been removed for security reasons.
+
+    When forked_from is *not* provided, the function falls back to
+    detecting the clone URL from the ``.git/config`` in srcdir.
 
     :param srcdir: Source directory containing .git/config
     :type srcdir: str
     :param dist_git_config_dir: Path to dist-git-client config directory
     :type dist_git_config_dir: str
+    :param forked_from: URL of the upstream dist-git repository that the
+        source repo was forked from.  Used to resolve the correct
+        lookaside cache URL from dist-git-client configuration.
+    :type forked_from: str or None
     :returns: Tuple of (parsed_url, distgit_config)
     :rtype: tuple
     :raises RuntimeError: If dist-git config cannot be loaded
@@ -104,7 +117,9 @@ def load_distgit_config(srcdir, dist_git_config_dir):
     try:
         os.chdir(srcdir)
         config = load_dist_git_config(dist_git_config_dir)
-        parsed_url, distgit_config = get_distgit_config(config)
+        parsed_url, distgit_config = get_distgit_config(
+            config, forked_from=forked_from,
+        )
         logging.debug("Loaded dist-git config: %s", distgit_config)
         return parsed_url, distgit_config
     finally:
@@ -332,6 +347,15 @@ def main():
         help="Path to specfile, mainly used when the expanded specfile is provided by mock, "
              "(default: search for specfile in source directory)",
     )
+    parser.add_argument(
+        "--forked-from",
+        action="store",
+        default=None,
+        help="URL of the upstream dist-git repository that the source repo "
+             "was forked from.  Used to resolve the correct lookaside cache "
+             "URL from dist-git-client configuration.  Also avoids the need "
+             "for .git/config when it has been removed.",
+    )
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
@@ -349,7 +373,9 @@ def main():
     logging.info("Working on sourcedir: %s", src_dir)
 
     # Load dist-git config early
-    parsed_url, distgit_config = load_distgit_config(src_dir, dist_git_config_dir)
+    parsed_url, distgit_config = load_distgit_config(
+        src_dir, dist_git_config_dir, forked_from=options.forked_from,
+    )
 
     repo_name = get_repo_name(parsed_url)
 
