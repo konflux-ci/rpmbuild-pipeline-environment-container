@@ -17,11 +17,6 @@ RUN \
 
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
-ADD python_scripts/pulp_upload.py /usr/bin
-ADD python_scripts/pulp_client.py /usr/bin
-ADD python_scripts/pulp_utils.py /usr/bin
-ADD python_scripts/pulp_transfer.py /usr/bin
-
 ADD python_scripts/gather_rpms.py /usr/local/bin/gather_rpms.py
 ADD python_scripts/check_noarch.py /usr/local/bin/check_noarch.py
 ADD python_scripts/common_utils.py /usr/local/bin/common_utils.py
