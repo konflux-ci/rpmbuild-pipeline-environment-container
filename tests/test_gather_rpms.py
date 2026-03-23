@@ -9,15 +9,16 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+import gather_rpms
 from gather_rpms import (
     prepare_koji_broot,
     create_broot_arch_rpms_file,
     handle_archdir,
-    buildroots,
-    broot_arch_rpms,
+    pick_ancestors,
     STAGING_DIR,
+    ANCESTORS_JSON,
     BROOT_ARCH_RPMS_JSON,
 )
 
@@ -29,7 +30,7 @@ class TestPrepareKojiBroot(unittest.TestCase):
 
     def setUp(self):
         """Reset global buildroots dict before each test."""
-        buildroots.clear()
+        gather_rpms.buildroots.clear()
 
     def test_prepare_koji_broot_with_lockfile(self):
         """Test prepare_koji_broot with valid lockfile."""
@@ -69,8 +70,8 @@ class TestPrepareKojiBroot(unittest.TestCase):
             prepare_koji_broot("x86_64", "test-pipeline-123", lockfile_path=lockfile_path)
 
             # Verify buildroot was created
-            self.assertIn("x86_64", buildroots)
-            buildroot = buildroots["x86_64"]
+            self.assertIn("x86_64", gather_rpms.buildroots)
+            buildroot = gather_rpms.buildroots["x86_64"]
 
             # Verify buildroot structure
             self.assertEqual(buildroot["content_generator"]["name"], "konflux")
@@ -112,8 +113,8 @@ class TestPrepareKojiBroot(unittest.TestCase):
         prepare_koji_broot("aarch64", "test-pipeline-456", lockfile_path=None)
 
         # Verify buildroot was created
-        self.assertIn("aarch64", buildroots)
-        buildroot = buildroots["aarch64"]
+        self.assertIn("aarch64", gather_rpms.buildroots)
+        buildroot = gather_rpms.buildroots["aarch64"]
 
         # Verify basic structure
         self.assertEqual(buildroot["container"]["arch"], "aarch64")
@@ -129,8 +130,8 @@ class TestPrepareKojiBroot(unittest.TestCase):
         prepare_koji_broot("ppc64le", "test-pipeline-789", lockfile_path=nonexistent_path)
 
         # Verify buildroot was created
-        self.assertIn("ppc64le", buildroots)
-        buildroot = buildroots["ppc64le"]
+        self.assertIn("ppc64le", gather_rpms.buildroots)
+        buildroot = gather_rpms.buildroots["ppc64le"]
 
         # Verify components list is empty when lockfile doesn't exist
         self.assertEqual(buildroot["components"], [])
@@ -159,7 +160,7 @@ class TestPrepareKojiBroot(unittest.TestCase):
         try:
             prepare_koji_broot("x86_64", "test-pipeline-epoch", lockfile_path=lockfile_path)
 
-            buildroot = buildroots["x86_64"]
+            buildroot = gather_rpms.buildroots["x86_64"]
             component = buildroot["components"][0]
 
             # Verify epoch is included
@@ -176,7 +177,7 @@ class TestCreateBrootArchRpmsFile(unittest.TestCase):
 
     def setUp(self):
         """Reset global broot_arch_rpms dict and create temp dir before each test."""
-        broot_arch_rpms.clear()
+        gather_rpms.broot_arch_rpms.clear()
         self.temp_dir = tempfile.mkdtemp()
         self.original_cwd = os.getcwd()
         # Create staging directory in temp dir
@@ -194,11 +195,11 @@ class TestCreateBrootArchRpmsFile(unittest.TestCase):
     def test_create_broot_arch_rpms_file(self):
         """Test create_broot_arch_rpms_file creates correct JSON."""
         # Populate broot_arch_rpms
-        broot_arch_rpms["x86_64"] = {
+        gather_rpms.broot_arch_rpms["x86_64"] = {
             "filelist": ["foo-1.0-1.el9.x86_64.rpm", "bar-2.0-1.el9.x86_64.rpm"],
             "lockfile": "x86_64/results/buildroot_lock.json"
         }
-        broot_arch_rpms["aarch64"] = {
+        gather_rpms.broot_arch_rpms["aarch64"] = {
             "filelist": ["foo-1.0-1.el9.aarch64.rpm"],
             "lockfile": "aarch64/results/buildroot_lock.json"
         }
@@ -242,6 +243,60 @@ class TestCreateBrootArchRpmsFile(unittest.TestCase):
         self.assertEqual(result, {})
 
 
+class TestPickAncestors(unittest.TestCase):
+    """Unit tests for pick_ancestors function."""
+
+    def setUp(self):
+        """Create temp dir and staging directory before each test."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
+        self.staging_dir = os.path.join(self.temp_dir, STAGING_DIR)
+        os.makedirs(self.staging_dir, exist_ok=True)
+        os.chdir(self.temp_dir)
+
+    def tearDown(self):
+        """Clean up temp directory and restore cwd."""
+        os.chdir(self.original_cwd)
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_pick_ancestors_symlinks_when_exists(self):
+        """Test pick_ancestors creates symlink when ancestors.json exists."""
+        arch = "x86_64"
+        results_dir = os.path.join(self.temp_dir, arch, "results")
+        os.makedirs(results_dir, exist_ok=True)
+
+        ancestors_data = [{"uri": "pkg:rpm/test-source@1.0"}]
+        with open(os.path.join(results_dir, ANCESTORS_JSON), 'w', encoding='utf-8') as f:
+            json.dump(ancestors_data, f)
+
+        pick_ancestors(arch, "test-1.0-1.el9.src.rpm")
+
+        ancestors_link = os.path.join(STAGING_DIR, ANCESTORS_JSON)
+        self.assertTrue(os.path.islink(ancestors_link))
+        self.assertEqual(
+            os.readlink(ancestors_link),
+            os.path.join('..', arch, 'results', ANCESTORS_JSON)
+        )
+
+    def test_pick_ancestors_warns_when_missing(self):
+        """Test pick_ancestors warns when ancestors.json is missing."""
+        arch = "x86_64"
+        results_dir = os.path.join(self.temp_dir, arch, "results")
+        os.makedirs(results_dir, exist_ok=True)
+
+        with self.assertLogs('root', level='WARNING') as cm:
+            pick_ancestors(arch, "test-1.0-1.el9.src.rpm")
+
+        self.assertTrue(
+            any(ANCESTORS_JSON in msg and "Missing" in msg for msg in cm.output),
+            f"Expected warning about missing {ANCESTORS_JSON}, got: {cm.output}"
+        )
+
+        ancestors_link = os.path.join(STAGING_DIR, ANCESTORS_JSON)
+        self.assertFalse(os.path.exists(ancestors_link))
+
+
 class TestHandleArchdirIntegration(unittest.TestCase):
     """
     Integration tests for handle_archdir with new buildroot functionality.
@@ -249,8 +304,13 @@ class TestHandleArchdirIntegration(unittest.TestCase):
 
     def setUp(self):
         """Reset global state and create temp directories before each test."""
-        buildroots.clear()
-        broot_arch_rpms.clear()
+        gather_rpms.buildroots.clear()
+        gather_rpms.broot_arch_rpms.clear()
+        gather_rpms.srpm = None
+        gather_rpms.rpms = {}
+        gather_rpms.noarch_rpms = []
+        gather_rpms.source_archs = {}
+        gather_rpms.logs = []
         self.temp_dir = tempfile.mkdtemp()
         self.original_cwd = os.getcwd()
         # Create staging directory in temp dir
@@ -265,73 +325,69 @@ class TestHandleArchdirIntegration(unittest.TestCase):
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
+    @patch('gather_rpms.pick_ancestors')
     @patch('gather_rpms.symlink')
     @patch('gather_rpms.pick_sbom')
     @patch('gather_rpms.prepare_koji_broot')
-    @patch('gather_rpms.os.path.join')
-    @patch('gather_rpms.os.listdir')
     def test_handle_archdir_tracks_rpms(
-            self, mock_listdir, mock_join, mock_prepare_koji_broot, _mock_pick_sbom, _mock_symlink):
+            self, mock_prepare_koji_broot, _mock_pick_sbom,
+            _mock_symlink, mock_pick_ancestors):
         """Test that handle_archdir tracks RPMs and calls prepare_koji_broot."""
 
         arch = "x86_64"
         pipeline_id = "test-pipeline-123"
 
-        # Mock directory contents
-        mock_listdir.return_value = [
-            "foo-1.0-1.el9.x86_64.rpm",
-            "bar-2.0-1.el9.x86_64.rpm",
-            "test-1.0-1.el9.src.rpm",
-            "build.log"
-        ]
+        # Create arch directory with RPM files
+        arch_dir = os.path.join(self.temp_dir, arch)
+        os.makedirs(arch_dir, exist_ok=True)
 
-        # Mock path join to return expected lockfile path
-        def join_side_effect(*args):
-            if len(args) == 3 and args[1] == 'results' and args[2] == 'buildroot_lock.json':
-                return "x86_64/results/buildroot_lock.json"
-            return "/".join(args)
+        for f in ["foo-1.0-1.el9.x86_64.rpm", "bar-2.0-1.el9.x86_64.rpm",
+                   "test-1.0-1.el9.src.rpm", "build.log"]:
+            with open(os.path.join(arch_dir, f), 'w', encoding='utf-8'):
+                pass
 
-        mock_join.side_effect = join_side_effect
-
-        # Call handle_archdir
         handle_archdir(arch, pipeline_id)
 
         # Verify prepare_koji_broot was called
         mock_prepare_koji_broot.assert_called_once_with(
             "x86_64",
             "test-pipeline-123",
-            lockfile_path="x86_64/results/buildroot_lock.json"
+            lockfile_path=os.path.join("x86_64", "results", "buildroot_lock.json")
         )
 
-        # Verify broot_arch_rpms was populated
-        self.assertIn("x86_64", broot_arch_rpms)
-        self.assertEqual(len(broot_arch_rpms["x86_64"]["filelist"]), 3)
-        self.assertIn("foo-1.0-1.el9.x86_64.rpm", broot_arch_rpms["x86_64"]["filelist"])
-        self.assertIn("bar-2.0-1.el9.x86_64.rpm", broot_arch_rpms["x86_64"]["filelist"])
-        self.assertIn("test-1.0-1.el9.src.rpm", broot_arch_rpms["x86_64"]["filelist"])
-        self.assertEqual(broot_arch_rpms["x86_64"]["lockfile"], "x86_64/results/buildroot_lock.json")
+        # Verify pick_ancestors was called for the SRPM
+        mock_pick_ancestors.assert_called_once_with(
+            "x86_64", "test-1.0-1.el9.src.rpm")
 
+        # Verify broot_arch_rpms was populated
+        self.assertIn("x86_64", gather_rpms.broot_arch_rpms)
+        self.assertEqual(len(gather_rpms.broot_arch_rpms["x86_64"]["filelist"]), 3)
+        self.assertIn("foo-1.0-1.el9.x86_64.rpm", gather_rpms.broot_arch_rpms["x86_64"]["filelist"])
+        self.assertIn("bar-2.0-1.el9.x86_64.rpm", gather_rpms.broot_arch_rpms["x86_64"]["filelist"])
+        self.assertIn("test-1.0-1.el9.src.rpm", gather_rpms.broot_arch_rpms["x86_64"]["filelist"])
+
+    @patch('gather_rpms.pick_ancestors')
     @patch('gather_rpms.symlink')
     @patch('gather_rpms.pick_sbom')
     @patch('gather_rpms.prepare_koji_broot')
-    @patch('gather_rpms.os.listdir')
     def test_handle_archdir_empty_directory(
-            self, mock_listdir, mock_prepare_koji_broot, _mock_pick_sbom, _mock_symlink):
+            self, mock_prepare_koji_broot, _mock_pick_sbom,
+            _mock_symlink, _mock_pick_ancestors):
         """Test handle_archdir with empty directory."""
 
-        mock_options = MagicMock()
-        mock_options.pipeline_id = "test-pipeline-456"
+        arch = "aarch64"
+        pipeline_id = "test-pipeline-456"
 
-        # Empty directory
-        mock_listdir.return_value = []
+        # Create empty arch directory
+        os.makedirs(os.path.join(self.temp_dir, arch), exist_ok=True)
 
-        handle_archdir(mock_options, "aarch64")
+        handle_archdir(arch, pipeline_id)
 
         # Verify prepare_koji_broot was not called
         mock_prepare_koji_broot.assert_not_called()
 
         # Verify broot_arch_rpms was not populated
-        self.assertNotIn("aarch64", broot_arch_rpms)
+        self.assertNotIn("aarch64", gather_rpms.broot_arch_rpms)
 
 
 if __name__ == "__main__":
