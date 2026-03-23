@@ -15,6 +15,7 @@ from common_utils import calc_checksum
 STAGING_DIR = "oras-staging"
 CG_IMPORT_JSON = "cg_import.json"
 NVR_FILE = "nvr.log"
+ANCESTORS_JSON = "ancestors.json"
 BROOT_ARCH_RPMS_JSON = "buildroot_rpms.json"
 
 # This is a metadata file that can be offered by RHEL/Fedora pipeline flavors
@@ -66,6 +67,20 @@ def pick_sbom(rpm_filename, arch):
     if not os.path.exists(arch_sbom_path):
         raise FileNotFoundError(f"SBOM {arch_sbom_path} not found")
     symlink(sbom_filename, arch)
+
+
+def pick_ancestors(arch, srpm_filename):
+    """Select and symlink ancestors.json for the given SRPM arch."""
+    ancestor_json = os.path.join(arch, 'results', ANCESTORS_JSON)
+    if os.path.exists(ancestor_json):
+        dst = os.path.join(STAGING_DIR, ANCESTORS_JSON)
+        src = os.path.join('..', arch, 'results', ANCESTORS_JSON)
+        logging.debug("Symlinking %s -> %s", dst, src)
+        os.symlink(src, dst)
+    else:
+        logging.warning(
+            "Missing %s for selected SRPM %s in %s", ANCESTORS_JSON, srpm_filename, arch
+        )
 
 
 def prepare_koji_broot(arch, pipeline_id, lockfile_path=None):
@@ -136,6 +151,7 @@ def handle_archdir(arch, pipeline_id):
                 all_rpms.append(filename)
                 symlink(filename, arch)
                 pick_sbom(rpm_filename=filename, arch=arch)
+                pick_ancestors(arch, filename)
         elif filename.endswith('.rpm'):
             rpms.setdefault(arch, []).append(filename)
             all_rpms.append(filename)
