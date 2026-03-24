@@ -15,7 +15,6 @@ RUN \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
 
-ADD specparser.py /usr/lib/python3.14/site-packages/rpmautospec/
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/pulp_upload.py /usr/bin
