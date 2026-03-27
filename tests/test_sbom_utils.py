@@ -183,6 +183,22 @@ class TestToSpdxLicense(unittest.TestCase):
         result = to_spdx_license("UnknownLicense")
         self.assertEqual(result, "NOASSERTION")
 
+    @patch("sbom_utils.run_command")
+    def test_multiline_output_returns_first_line(self, mock_run_command):
+        """Test that only the first line of output is used."""
+        mock_run_command.return_value = MagicMock(
+            stdout="GPL-3.0-or-later\nsome extra output\n", returncode=0)
+        result = to_spdx_license("GPLv3+")
+        self.assertEqual(result, "GPL-3.0-or-later")
+
+    @patch("sbom_utils.run_command")
+    def test_blank_first_line_returns_noassertion(self, mock_run_command):
+        """Test that a blank first line results in NOASSERTION."""
+        mock_run_command.return_value = MagicMock(
+            stdout="  \nactual license\n", returncode=0)
+        result = to_spdx_license("SomeLicense")
+        self.assertEqual(result, "NOASSERTION")
+
 
 if __name__ == "__main__":
     unittest.main()
