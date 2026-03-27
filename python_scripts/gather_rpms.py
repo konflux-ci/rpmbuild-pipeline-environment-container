@@ -65,6 +65,7 @@ def pick_sbom(rpm_filename, arch):
     arch_sbom_path = os.path.join(arch, sbom_filename)
     logging.info("Picking SBOM %s for %s/%s", arch_sbom_path, arch, rpm_filename)
     if not os.path.exists(arch_sbom_path):
+        # TODO: Revert to raising an error once sbom.json files are reliably available.
         logging.warning("SBOM file %s not found for %s/%s, skipping symlink creation",
                         arch_sbom_path, arch, rpm_filename)
         return
