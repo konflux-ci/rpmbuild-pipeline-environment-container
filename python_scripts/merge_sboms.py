@@ -608,8 +608,9 @@ def merge_sboms(
             relationship["spdxElementId"] == "SPDXRef-DOCUMENT"
             and relationship["relationshipType"] == "DESCRIBES"
         ):
-            relationship["spdxElementId"] = "SPDXRef-Source0"  # pick first one
+            relationship["spdxElementId"] = "SPDXRef-SRPM"
             relationship["relationshipType"] = "CONTAINS"
+            break
     root_sbom['relationships'].extend(syft_rels)
 
     # Add source data if provided

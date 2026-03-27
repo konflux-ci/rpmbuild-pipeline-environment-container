@@ -1,25 +1,36 @@
 {
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "test-pkg-1.1.1-1.el9.src",
+  "documentNamespace": "https://anchore.com/syft/dir/test-pkg-1.1.1-1.el9.src-aaaa-bbbb",
+  "creationInfo": {
+    "created": "2025-09-23T10:00:00Z",
+    "creators": [
+      "Organization: Anchore, Inc",
+      "Tool: syft-1.20.0"
+    ]
+  },
   "packages": [
     {
-      "SPDXID": "SPDXRef-noarch-test-pkg",
-      "name": "test-pkg",
-      "versionInfo": "1.1.1-1.el8",
-      "supplier": "Organization: Red Hat",
+      "SPDXID": "SPDXRef-DocumentRoot-Directory",
+      "name": "test-pkg-1.1.1-1.el9.src",
       "downloadLocation": "NOASSERTION",
-      "packageFileName": "test-pkg-1.1.1-1.el8.src.rpm",
-      "builtDate": "2025-09-23",
-      "licenseConcluded": "LGPL-2.1-only AND GPL-2.0-or-later",
+      "filesAnalyzed": false,
+      "primaryPackagePurpose": "SOURCE"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-python-setuptools-59.6.0",
+      "name": "python-setuptools",
+      "versionInfo": "59.6.0",
+      "supplier": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:rpm/redhat/test-pkg@1.1.1-1.el8?arch=noarch"
-        }
-      ],
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "186deeb746c0802fae513f3429cc9f600b08702b1d188fd597c"
+          "referenceLocator": "pkg:pypi/setuptools@59.6.0"
         }
       ]
     }
@@ -29,12 +40,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-SRPM"
+      "relatedSpdxElement": "SPDXRef-DocumentRoot-Directory"
     },
     {
-      "spdxElementId": "SPDXRef-noarch-test-pkg",
-      "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-SRPM"
+      "spdxElementId": "SPDXRef-DocumentRoot-Directory",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-python-setuptools-59.6.0"
     }
   ]
 }
