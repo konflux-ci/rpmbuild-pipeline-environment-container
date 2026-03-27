@@ -16,6 +16,7 @@ from gather_rpms import (
     prepare_koji_broot,
     create_broot_arch_rpms_file,
     handle_archdir,
+    pick_sbom,
     pick_ancestors,
     STAGING_DIR,
     ANCESTORS_JSON,
@@ -243,8 +244,8 @@ class TestCreateBrootArchRpmsFile(unittest.TestCase):
         self.assertEqual(result, {})
 
 
-class TestPickAncestors(unittest.TestCase):
-    """Unit tests for pick_ancestors function."""
+class TestPickSbom(unittest.TestCase):
+    """Unit tests for pick_sbom function."""
 
     def setUp(self):
         """Create temp dir and staging directory before each test."""
@@ -259,6 +260,68 @@ class TestPickAncestors(unittest.TestCase):
         os.chdir(self.original_cwd)
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+
+    @patch('gather_rpms.symlink')
+    def test_pick_sbom_when_exists(self, mock_symlink):
+        """Test pick_sbom calls symlink when SBOM file exists."""
+        arch = "x86_64"
+        arch_dir = os.path.join(self.temp_dir, arch)
+        os.makedirs(arch_dir, exist_ok=True)
+
+        # Create the expected SBOM file
+        with open(os.path.join(arch_dir, "foo-1.0-1.el9.x86_64.sbom.json"),
+                  'w', encoding='utf-8'):
+            pass
+
+        pick_sbom("foo-1.0-1.el9.x86_64.rpm", arch)
+
+        mock_symlink.assert_called_once_with(
+            "foo-1.0-1.el9.x86_64.sbom.json", arch)
+
+    @patch('gather_rpms.symlink')
+    def test_pick_sbom_warns_when_missing(self, mock_symlink):
+        """Test pick_sbom warns and skips when SBOM file is missing."""
+        arch = "x86_64"
+        arch_dir = os.path.join(self.temp_dir, arch)
+        os.makedirs(arch_dir, exist_ok=True)
+
+        with self.assertLogs('root', level='WARNING') as cm:
+            pick_sbom("foo-1.0-1.el9.x86_64.rpm", arch)
+
+        self.assertTrue(
+            any("not found" in msg for msg in cm.output),
+            f"Expected warning about missing SBOM, got: {cm.output}"
+        )
+        mock_symlink.assert_not_called()
+
+    @patch('gather_rpms.symlink')
+    def test_pick_sbom_src_rpm(self, mock_symlink):
+        """Test pick_sbom generates correct SBOM name for src.rpm."""
+        arch = "x86_64"
+        arch_dir = os.path.join(self.temp_dir, arch)
+        os.makedirs(arch_dir, exist_ok=True)
+
+        with open(os.path.join(arch_dir, "test-1.0-1.el9.src.sbom.json"),
+                  'w', encoding='utf-8'):
+            pass
+
+        pick_sbom("test-1.0-1.el9.src.rpm", arch)
+
+        mock_symlink.assert_called_once_with(
+            "test-1.0-1.el9.src.sbom.json", arch)
+
+
+class TestPickAncestors(unittest.TestCase):
+    """Unit tests for pick_ancestors function."""
+
+    def setUp(self):
+        """Create temp dir, staging directory, and change CWD before each test."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.temp_dir)
+        self.original_cwd = os.getcwd()
+        self.addCleanup(os.chdir, self.original_cwd)
+        os.makedirs(os.path.join(self.temp_dir, STAGING_DIR), exist_ok=True)
+        os.chdir(self.temp_dir)
 
     def test_pick_ancestors_symlinks_when_exists(self):
         """Test pick_ancestors creates symlink when ancestors.json exists."""
