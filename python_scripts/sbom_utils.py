@@ -62,8 +62,24 @@ def to_spdx_license(rpm_license):
 
     try:
         result = run_command(["license-fedora2spdx", rpm_license], timeout=5)
-        spdx_license = result.stdout.strip()
-        return spdx_license if spdx_license else "NOASSERTION"
+        lines = result.stdout.splitlines()
+        if not lines:
+            logging.warning("[CRITICAL] license-fedora2spdx returned empty output for license '%s'", rpm_license)
+            return "NOASSERTION"
+
+        spdx_license = lines[0].strip()
+        if not spdx_license:
+            logging.warning("[CRITICAL] license-fedora2spdx returned blank first line for license '%s'", rpm_license)
+            return "NOASSERTION"
+
+        if len(lines) > 1:
+            logging.warning(
+                "[IMPORTANT] license-fedora2spdx returned some important notes for license '%s':\n%s",
+                rpm_license, result.stdout)
+
+        if spdx_license != rpm_license:
+            logging.debug("Converted RPM license '%s' to SPDX license '%s'", rpm_license, spdx_license)
+        return spdx_license
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
         logging.warning("[CRITICAL] Failed to convert license '%s' to SPDX: %s", rpm_license, e)
         return "NOASSERTION"
