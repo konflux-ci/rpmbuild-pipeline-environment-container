@@ -124,15 +124,26 @@ class TestToSpdxLicense(unittest.TestCase):
     """
 
     @patch("sbom_utils.run_command")
-    def test_convert_gpl_license(self, mock_run_command):
-        """Test converting GPL license."""
-        mock_run_command.return_value = MagicMock(stdout="GPL-3.0-or-later\n", returncode=0)
+    def test_valid_spdx_license_returned_directly(self, mock_run_command):
+        """Test that a valid SPDX license is returned without conversion."""
+        mock_run_command.return_value = MagicMock(returncode=0)
         result = to_spdx_license("GPL-3.0-or-later")
         self.assertEqual(result, "GPL-3.0-or-later")
         mock_run_command.assert_called_once_with(
-            ["license-fedora2spdx", "GPL-3.0-or-later"],
+            ["license-validate", "GPL-3.0-or-later"],
             timeout=5
         )
+
+    @patch("sbom_utils.run_command")
+    def test_convert_gpl_license(self, mock_run_command):
+        """Test converting non-SPDX license via license-fedora2spdx."""
+        mock_run_command.side_effect = [
+            MagicMock(returncode=1),
+            MagicMock(stdout="GPL-3.0-or-later\n", returncode=0),
+        ]
+        result = to_spdx_license("GPLv3+")
+        self.assertEqual(result, "GPL-3.0-or-later")
+        self.assertEqual(mock_run_command.call_count, 2)
 
     @patch("sbom_utils.run_command")
     def test_convert_lgpl_license(self, mock_run_command):
@@ -178,24 +189,31 @@ class TestToSpdxLicense(unittest.TestCase):
 
     @patch("sbom_utils.run_command")
     def test_empty_output(self, mock_run_command):
-        """Test handling of empty output from command."""
-        mock_run_command.return_value = MagicMock(stdout="", returncode=0)
+        """Test handling of empty output from license-fedora2spdx."""
+        mock_run_command.side_effect = [
+            MagicMock(returncode=1),
+            MagicMock(stdout="", returncode=0),
+        ]
         result = to_spdx_license("UnknownLicense")
         self.assertEqual(result, "NOASSERTION")
 
     @patch("sbom_utils.run_command")
     def test_multiline_output_returns_first_line(self, mock_run_command):
         """Test that only the first line of output is used."""
-        mock_run_command.return_value = MagicMock(
-            stdout="GPL-3.0-or-later\nsome extra output\n", returncode=0)
+        mock_run_command.side_effect = [
+            MagicMock(returncode=1),
+            MagicMock(stdout="GPL-3.0-or-later\nsome extra output\n", returncode=0),
+        ]
         result = to_spdx_license("GPLv3+")
         self.assertEqual(result, "GPL-3.0-or-later")
 
     @patch("sbom_utils.run_command")
     def test_blank_first_line_returns_noassertion(self, mock_run_command):
         """Test that a blank first line results in NOASSERTION."""
-        mock_run_command.return_value = MagicMock(
-            stdout="  \nactual license\n", returncode=0)
+        mock_run_command.side_effect = [
+            MagicMock(returncode=1),
+            MagicMock(stdout="  \nactual license\n", returncode=0),
+        ]
         result = to_spdx_license("SomeLicense")
         self.assertEqual(result, "NOASSERTION")
 
