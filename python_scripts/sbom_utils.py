@@ -61,6 +61,11 @@ def to_spdx_license(rpm_license):
         return "NOASSERTION"
 
     try:
+        result = run_command(["license-validate", rpm_license], timeout=5)
+        if result.returncode == 0:
+            logging.debug("Valid SPDX license '%s'", rpm_license)
+            return rpm_license
+
         result = run_command(["license-fedora2spdx", rpm_license], timeout=5)
         lines = result.stdout.splitlines()
         if not lines:
