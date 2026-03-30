@@ -73,6 +73,7 @@ def create_base_sbom(rpm_dir):
 
     if not srpm:
         raise FileNotFoundError(f"No SRPM found in {rpm_dir}")
+
     nvr = srpm[:-8]  # Remove .src.rpm extension
 
     # Initialize SBOM structure
@@ -103,6 +104,7 @@ def create_base_sbom(rpm_dir):
     rpm_spdxids = []
     for rpm in [srpm] + rpms:
         path = os.path.join(rpm_dir, rpm)
+
         rpminfo = koji.get_header_fields(
             path,
             [
@@ -115,11 +117,15 @@ def create_base_sbom(rpm_dir):
                 "license",
                 "sigmd5",
                 "sha256header",
+                "sourcepackage"
+                "sourcerpm",
             ],
         )
 
-        if rpminfo['arch'] == 'src':
+        # check by arch in filename (arch in header is actually the buildarch)
+        if rpminfo['sourcepackage']:
             spdxid = "SPDXRef-SRPM"
+            rpminfo['arch'] = "src"
         else:
             spdxid = f"SPDXRef-{rpminfo['arch']}-{rpminfo['name']}"
 
@@ -158,7 +164,12 @@ def create_base_sbom(rpm_dir):
         })
 
         # All binary RPMs are generated from SRPM
-        if rpminfo['arch'] != 'src':
+        if rpminfo['arch'] != "src":
+            if rpminfo.get('sourcerpm') and rpminfo['sourcerpm'] != srpm:
+                raise ValueError(
+                    f"[CRITICAL] Binary RPM {rpm} has sourcerpm header {rpminfo['sourcerpm']}"
+                    f" that does not match expected SRPM {srpm}",
+                )
             sbom['relationships'].append({
                 "spdxElementId": spdxid,
                 "relationshipType": "GENERATED_FROM",

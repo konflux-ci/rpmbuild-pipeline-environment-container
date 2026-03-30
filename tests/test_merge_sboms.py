@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from merge_sboms import (
     _main as merge_sboms,
+    create_base_sbom,
     attach_sources,
     attach_buildroot_packages,
     attach_syft_sboms,
@@ -569,6 +570,87 @@ class TestAttachBuildrootPackages(unittest.TestCase):
         finally:
             os.unlink(lockfile_path)
             os.unlink(broot_arch_list_file)
+
+
+class TestCreateBaseSbom(unittest.TestCase):
+    """
+    Unit tests for create_base_sbom - verifies SRPM detection via sourcepackage header.
+    """
+
+    @patch('merge_sboms.to_spdx_license', return_value="MIT")
+    @patch('merge_sboms.calc_checksum', return_value="abc123")
+    @patch('merge_sboms.koji')
+    def test_srpm_detected_by_sourcepackage_header(self, mock_koji, _mock_checksum, _mock_license):
+        """Test that SRPM is detected via sourcepackage header field.
+
+        SRPM header arch is the buildarch (e.g. x86_64), not 'src'.
+        The code uses sourcepackage header to identify SRPMs and sets
+        arch to 'src' accordingly.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["foo-1.0-1.el9.src.rpm", "foo-1.0-1.el9.noarch.rpm"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding='utf-8'):
+                    pass
+
+            # SRPM: sourcepackage=1, header arch=x86_64 (buildarch)
+            # noarch RPM: sourcepackage=None, header arch=noarch, sourcerpm matches
+            mock_koji.get_header_fields.side_effect = [
+                {"name": "foo", "version": "1.0", "release": "1.el9",
+                 "arch": "x86_64", "description": "test", "license": "MIT",
+                 "sigmd5": "aaa", "sha256header": "bbb",
+                 "sourcepackage": 1, "sourcerpm": None},
+                {"name": "foo", "version": "1.0", "release": "1.el9",
+                 "arch": "noarch", "description": "test", "license": "MIT",
+                 "sigmd5": "aaa", "sha256header": "bbb",
+                 "sourcepackage": None, "sourcerpm": "foo-1.0-1.el9.src.rpm"},
+            ]
+
+            sbom = create_base_sbom(tmpdir)
+
+        # SRPM: arch overridden to 'src', gets SPDXRef-SRPM
+        srpm_pkg = sbom['packages'][0]
+        self.assertEqual(srpm_pkg['SPDXID'], "SPDXRef-SRPM")
+        self.assertIn("arch=src", srpm_pkg['externalRefs'][0]['referenceLocator'])
+
+        # noarch RPM uses header arch directly
+        bin_pkg = sbom['packages'][1]
+        self.assertEqual(bin_pkg['SPDXID'], "SPDXRef-noarch-foo")
+        self.assertIn("arch=noarch", bin_pkg['externalRefs'][0]['referenceLocator'])
+
+        # GENERATED_FROM relationship for binary RPM only
+        gen_rels = [r for r in sbom['relationships']
+                    if r['relationshipType'] == 'GENERATED_FROM']
+        self.assertEqual(len(gen_rels), 1)
+        self.assertEqual(gen_rels[0]['spdxElementId'], "SPDXRef-noarch-foo")
+
+    @patch('merge_sboms.to_spdx_license', return_value="MIT")
+    @patch('merge_sboms.calc_checksum', return_value="abc123")
+    @patch('merge_sboms.koji')
+    def test_sourcerpm_mismatch_raises(self, mock_koji, _mock_checksum, _mock_license):
+        """Test that mismatched sourcerpm header raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["foo-1.0-1.el9.src.rpm", "foo-1.0-1.el9.noarch.rpm"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding='utf-8'):
+                    pass
+
+            mock_koji.get_header_fields.side_effect = [
+                {"name": "foo", "version": "1.0", "release": "1.el9",
+                 "arch": "x86_64", "description": "test", "license": "MIT",
+                 "sigmd5": "aaa", "sha256header": "bbb",
+                 "sourcepackage": 1, "sourcerpm": None},
+                {"name": "foo", "version": "1.0", "release": "1.el9",
+                 "arch": "noarch", "description": "test", "license": "MIT",
+                 "sigmd5": "aaa", "sha256header": "bbb",
+                 "sourcepackage": None, "sourcerpm": "bar-2.0-1.el9.src.rpm"},
+            ]
+
+            with self.assertRaises(ValueError) as ve:
+                create_base_sbom(tmpdir)
+            self.assertEqual(
+                str(ve.exception),
+                "[CRITICAL] Binary RPM foo-1.0-1.el9.noarch.rpm has sourcerpm header bar-2.0-1.el9.src.rpm"
+                " that does not match expected SRPM foo-1.0-1.el9.src.rpm",
+            )
 
 
 class TestMergeSboms(unittest.TestCase):
