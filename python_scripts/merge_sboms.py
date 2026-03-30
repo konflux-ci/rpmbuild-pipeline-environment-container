@@ -117,7 +117,7 @@ def create_base_sbom(rpm_dir):
                 "license",
                 "sigmd5",
                 "sha256header",
-                "sourcepackage"
+                "sourcepackage",
                 "sourcerpm",
             ],
         )
