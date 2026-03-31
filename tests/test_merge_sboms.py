@@ -761,14 +761,15 @@ class TestAttachSyftSboms(unittest.TestCase):
 
         rpm_packages = _find_rpm_packages(sbom_root)
 
-        # Should include binary RPMs but not source RPM
-        self.assertEqual(len(rpm_packages), 3)
+        # Should include both SRPM and binary RPMs
+        self.assertEqual(len(rpm_packages), 4)
+        self.assertIn("test-pkg-1.0-1.el9.src", rpm_packages)
         self.assertIn("foo-1.0-1.el9.x86_64", rpm_packages)
         self.assertIn("bar-2.0-1.el9.x86_64", rpm_packages)
         self.assertIn("baz-3.0-1.el9.noarch", rpm_packages)
-        self.assertNotIn("test-pkg-1.0-1.el9.src", rpm_packages)
 
         # Verify package references
+        self.assertEqual(rpm_packages["test-pkg-1.0-1.el9.src"]["SPDXID"], "SPDXRef-SRPM")
         self.assertEqual(rpm_packages["foo-1.0-1.el9.x86_64"]["SPDXID"], "SPDXRef-x86_64-foo")
 
     def test_rename_doc_root_id(self):
@@ -932,6 +933,69 @@ class TestAttachSyftSboms(unittest.TestCase):
         spdx_ids = [p["SPDXID"] for p in sbom_root["packages"]]
         self.assertIn("SPDXRef-Directory-Root-foo-1.0-1.el9.x86_64", spdx_ids)
         self.assertIn("SPDXRef-Directory-Root-bar-2.0-1.el9.x86_64", spdx_ids)
+
+    def test_attach_syft_sboms_srpm(self):
+        """Test attaching a syft SBOM for an SRPM."""
+        sbom_root = {
+            "packages": [
+                {
+                    "SPDXID": "SPDXRef-SRPM",
+                    "packageFileName": "test-pkg-1.0-1.el9.src.rpm",
+                    "name": "test-pkg"
+                }
+            ],
+            "files": [],
+            "relationships": []
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # SRPM syft SBOM filename: NVR.src.sbom.json
+            syft_sbom_file = os.path.join(tmpdir, "test-pkg-1.0-1.el9.src.sbom.json")
+            syft_sbom_data = {
+                "packages": [
+                    {
+                        "SPDXID": "SPDXRef-RootDir",
+                        "name": "test-pkg-root"
+                    },
+                    {
+                        "SPDXID": "SPDXRef-Package-src-file",
+                        "name": "source-file",
+                        "versionInfo": "1.0"
+                    }
+                ],
+                "files": [],
+                "relationships": [
+                    {
+                        "spdxElementId": "SPDXRef-DOCUMENT",
+                        "relationshipType": "DESCRIBES",
+                        "relatedSpdxElement": "SPDXRef-RootDir"
+                    },
+                    {
+                        "spdxElementId": "SPDXRef-RootDir",
+                        "relationshipType": "CONTAINS",
+                        "relatedSpdxElement": "SPDXRef-Package-src-file"
+                    }
+                ]
+            }
+
+            with open(syft_sbom_file, 'w', encoding="utf-8") as f:
+                json.dump(syft_sbom_data, f)
+
+            attach_syft_sboms(sbom_root, tmpdir)
+
+        # Should have 3 packages: original SRPM + 2 from syft SBOM
+        self.assertEqual(len(sbom_root["packages"]), 3)
+
+        # Check root directory was renamed with SRPM NVRA
+        root_pkg = [p for p in sbom_root["packages"] if "Directory-Root" in p["SPDXID"]][0]
+        self.assertEqual(root_pkg["SPDXID"], "SPDXRef-Directory-Root-test-pkg-1.0-1.el9.src")
+
+        # Check CONTAINS relationship from SRPM to root directory
+        srpm_contains_rel = [r for r in sbom_root["relationships"]
+                             if r["spdxElementId"] == "SPDXRef-SRPM"
+                             and r["relationshipType"] == "CONTAINS"][0]
+        self.assertEqual(srpm_contains_rel["relatedSpdxElement"],
+                         "SPDXRef-Directory-Root-test-pkg-1.0-1.el9.src")
 
     def test_attach_syft_sboms_no_match(self):
         """Test handling of RPM SBOM with no matching binary RPM."""
