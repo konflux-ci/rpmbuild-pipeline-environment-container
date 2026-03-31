@@ -299,8 +299,8 @@ def _find_rpm_packages(sbom_root):
     for pkg in sbom_root.get("packages", []):
         pkg_filename = pkg.get("packageFileName", "")
 
-        # Only process .rpm files (skip .src.rpm)
-        if pkg_filename.endswith(".rpm") and not pkg_filename.endswith(".src.rpm"):
+        # Only process .rpm files
+        if pkg_filename.endswith(".rpm"):
             # Remove .rpm extension to get NVRA
             nvra = pkg_filename[:-4]
             rpm_packages[nvra] = pkg
@@ -355,7 +355,7 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
     :type syft_sbom_dir: str
     """
 
-    # Build mapping of NVRA to RPM packages
+    # Build mapping of NVRA to (S)RPM packages
     rpm_packages = _find_rpm_packages(sbom_root)
 
     if not syft_sbom_dir:
