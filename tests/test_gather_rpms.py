@@ -429,6 +429,12 @@ class TestHandleArchdirIntegration(unittest.TestCase):
         self.assertIn("bar-2.0-1.el9.x86_64.rpm", gather_rpms.broot_arch_rpms["x86_64"]["filelist"])
         self.assertIn("test-1.0-1.el9.src.rpm", gather_rpms.broot_arch_rpms["x86_64"]["filelist"])
 
+        # Verify lockfile path is absolute and correct
+        lockfile = gather_rpms.broot_arch_rpms["x86_64"]["lockfile"]
+        self.assertTrue(os.path.isabs(lockfile), f"lockfile path should be absolute: {lockfile}")
+        expected_lockfile = os.path.join(self.temp_dir, "x86_64", "results", "buildroot_lock.json")
+        self.assertEqual(lockfile, expected_lockfile)
+
     @patch('gather_rpms.pick_ancestors')
     @patch('gather_rpms.symlink')
     @patch('gather_rpms.pick_sbom')

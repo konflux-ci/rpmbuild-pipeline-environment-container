@@ -175,7 +175,8 @@ def handle_archdir(arch, pipeline_id):
         broot_arch_rpms[arch] = {
             "filelist": all_rpms,
             # we don't symlink buildroot_lock.json, just note its location
-            "lockfile": lockfile_path}
+            "lockfile": os.path.abspath(lockfile_path)
+        }
         logging.debug("(S)RPMs built in %s Buildroot:\n%s", arch, pprint.pformat(rpms, indent=2))
         logging.debug("Buildroot lockfile: %s", broot_arch_rpms[arch]["lockfile"])
         prepare_koji_broot(arch, pipeline_id, lockfile_path=lockfile_path)
