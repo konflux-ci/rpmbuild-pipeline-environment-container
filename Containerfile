@@ -18,7 +18,6 @@ RUN \
 ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 
 ADD python_scripts/*.py /usr/local/bin
-RUN ln -s merge_sboms.py /usr/local/bin/merge_syft_sbom.py
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
