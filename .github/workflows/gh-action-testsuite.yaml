@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.get-image-link.outputs.fedora_image_link }}
+    permissions:
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -40,3 +42,11 @@ jobs:
 
       - name: Run unit tests
         run: ./run_tests.sh
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          flags: unit-tests
+          files: coverage.xml
+          fail_ci_if_error: false
