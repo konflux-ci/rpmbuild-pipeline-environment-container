@@ -21,7 +21,8 @@ from merge_sboms import (
     attach_syft_sboms,
     _find_rpm_packages,
     _rename_doc_root_id,
-    DEFAULT_SBOM_CREATOR,
+    DEFAULT_SBOM_CREATORS,
+    DEFAULT_ANNOTATOR,
     DEFAULT_DOCUMENT_NAMESPACE,
     DEFAULT_SUPPLIER,
 )
@@ -1077,7 +1078,8 @@ class TestInitConfig(unittest.TestCase):
     def _reset_config(self):
         """Reset CONFIG to defaults."""
         CONFIG.update({
-            "sbom_creator": DEFAULT_SBOM_CREATOR,
+            "sbom_creators": list(DEFAULT_SBOM_CREATORS),
+            "annotator": DEFAULT_ANNOTATOR,
             "document_namespace": DEFAULT_DOCUMENT_NAMESPACE,
             "supplier": DEFAULT_SUPPLIER,
             "purl_rpm_namespace": "fedora",
@@ -1092,7 +1094,7 @@ class TestInitConfig(unittest.TestCase):
     def test_loads_valid_config(self):
         """Test loading a valid config file overrides defaults."""
         config_data = {
-            "sbom_creator": "Tool: MyTool",
+            "sbom_creators": ["Tool: MyTool", "Tool: Other"],
             "supplier": "Organization: ACME",
         }
 
@@ -1102,7 +1104,7 @@ class TestInitConfig(unittest.TestCase):
 
         try:
             init_config(config_path)
-            self.assertEqual(CONFIG["sbom_creator"], "Tool: MyTool")
+            self.assertEqual(CONFIG["sbom_creators"], ["Tool: MyTool", "Tool: Other"])
             self.assertEqual(CONFIG["supplier"], "Organization: ACME")
             # Unchanged keys keep defaults
             self.assertEqual(CONFIG["document_namespace"], DEFAULT_DOCUMENT_NAMESPACE)
@@ -1113,7 +1115,7 @@ class TestInitConfig(unittest.TestCase):
     def test_ignores_unknown_keys(self):
         """Test that unknown keys in config file are ignored."""
         config_data = {
-            "sbom_creator": "Tool: Custom",
+            "sbom_creators": ["Tool: Custom"],
             "unknown_key": "should be ignored",
         }
 
@@ -1123,7 +1125,7 @@ class TestInitConfig(unittest.TestCase):
 
         try:
             init_config(config_path)
-            self.assertEqual(CONFIG["sbom_creator"], "Tool: Custom")
+            self.assertEqual(CONFIG["sbom_creators"], ["Tool: Custom"])
             self.assertNotIn("unknown_key", CONFIG)
         finally:
             os.unlink(config_path)
@@ -1131,13 +1133,13 @@ class TestInitConfig(unittest.TestCase):
     def test_missing_explicit_path_keeps_defaults(self):
         """Test that a nonexistent explicit path logs warning and keeps defaults."""
         init_config("/nonexistent/path/config.json")
-        self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+        self.assertEqual(CONFIG["sbom_creators"], list(DEFAULT_SBOM_CREATORS))
         self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
 
     def test_missing_default_path_keeps_defaults(self):
         """Test that missing default config path keeps defaults silently."""
         init_config(None)
-        self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+        self.assertEqual(CONFIG["sbom_creators"], list(DEFAULT_SBOM_CREATORS))
         self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
 
     def test_invalid_json_keeps_defaults(self):
@@ -1148,7 +1150,7 @@ class TestInitConfig(unittest.TestCase):
 
         try:
             init_config(config_path)
-            self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+            self.assertEqual(CONFIG["sbom_creators"], list(DEFAULT_SBOM_CREATORS))
             self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
         finally:
             os.unlink(config_path)
@@ -1156,7 +1158,8 @@ class TestInitConfig(unittest.TestCase):
     def test_all_keys_configurable(self):
         """Test that all CONFIG keys can be overridden."""
         config_data = {
-            "sbom_creator": "Tool: X",
+            "sbom_creators": ["Tool: X", "Tool: Y"],
+            "annotator": "Tool: X",
             "document_namespace": "https://example.com/{nvr}.spdx.json",
             "supplier": "Organization: X",
             "purl_rpm_namespace": "centos",
@@ -1168,7 +1171,8 @@ class TestInitConfig(unittest.TestCase):
 
         try:
             init_config(config_path)
-            self.assertEqual(CONFIG["sbom_creator"], "Tool: X")
+            self.assertEqual(CONFIG["sbom_creators"], ["Tool: X", "Tool: Y"])
+            self.assertEqual(CONFIG["annotator"], "Tool: X")
             self.assertEqual(CONFIG["document_namespace"], "https://example.com/{nvr}.spdx.json")
             self.assertEqual(CONFIG["supplier"], "Organization: X")
             self.assertEqual(CONFIG["purl_rpm_namespace"], "centos")
