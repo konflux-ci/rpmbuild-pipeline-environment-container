@@ -42,7 +42,7 @@ download_files test-source-rpms \
 
 download_files test-git-repos git-repos/rpmbuild-pipeline-git.tar.gz
 
-coverage=( --cov-report term-missing --cov python_scripts )
+coverage=( --cov-report term-missing --cov-report xml:coverage.xml --cov python_scripts )
 for arg; do
     case $arg in
     --no-coverage) coverage=() ;;
