@@ -21,18 +21,21 @@ from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl
 
 
 DEFAULT_CONFIG_PATH = "/etc/rpmbuild_sbom/config.json"
-DEFAULT_SBOM_CREATOR = "Tool: Konflux"
+DEFAULT_SBOM_CREATORS = ["Tool: Konflux", "Organization: Fedora"]
+DEFAULT_ANNOTATOR = "Tool: Konflux"
 DEFAULT_DOCUMENT_NAMESPACE = "https://fedoraproject.org/{nvr}.spdx.json"
 DEFAULT_SUPPLIER = "Organization: Fedora"
+DEFAULT_PURL_RPM_NAMESPACE = "fedora"
 
 SBOM_CREATED_TIME = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # Global config instance, initialized via init_config()
 CONFIG = {
-    "sbom_creator": DEFAULT_SBOM_CREATOR,
+    "sbom_creators": list(DEFAULT_SBOM_CREATORS),
+    "annotator": DEFAULT_ANNOTATOR,
     "document_namespace": DEFAULT_DOCUMENT_NAMESPACE,
     "supplier": DEFAULT_SUPPLIER,
-    "purl_rpm_namespace": "fedora",
+    "purl_rpm_namespace": DEFAULT_PURL_RPM_NAMESPACE,
 }
 
 
@@ -119,9 +122,7 @@ def create_base_sbom(rpm_dir):
         "SPDXID": "SPDXRef-DOCUMENT",
         "creationInfo": {
             "created": SBOM_CREATED_TIME,
-            "creators": [
-                CONFIG["sbom_creator"]
-            ],
+            "creators": CONFIG["sbom_creators"],
         },
         "name": nvr,
         "documentNamespace": CONFIG["document_namespace"].format(nvr=nvr),
@@ -560,7 +561,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             if sigmd5:
                 pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
-                    "annotator": CONFIG["sbom_creator"],
+                    "annotator": CONFIG["annotator"],
                     "annotationDate": SBOM_CREATED_TIME,
                     "comment": f"sigmd5: {sigmd5}",
                 })
@@ -569,7 +570,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             if sha256header:
                 pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
-                    "annotator": CONFIG["sbom_creator"],
+                    "annotator": CONFIG["annotator"],
                     "annotationDate": SBOM_CREATED_TIME,
                     "comment": f"sha256header: {sha256header}",
                 })
