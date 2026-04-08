@@ -24,7 +24,7 @@ def get_generic_purl(name, version=None, url=None, checksum=None, alg=None):
     return purl
 
 
-def get_rpm_purl(name, version, release, arch, epoch=None):
+def get_rpm_purl(name, version, release, arch, *, epoch=None, namespace="fedora"):
     """Generate Package URL (purl) for an RPM package.
 
     :param name: Package name
@@ -37,15 +37,17 @@ def get_rpm_purl(name, version, release, arch, epoch=None):
     :type arch: str
     :param epoch: Package epoch (optional)
     :type epoch: str or None
+    :param namespace: RPM purl namespace (e.g. "fedora", "redhat")
+    :type namespace: str
     :returns: RPM purl string
     :rtype: str
     """
-    # Format: pkg:rpm/redhat/name@version-release?arch=...
+    # Format: pkg:rpm/namespace/name@version-release?arch=...
     version_str = f"{version}-{release}"
     if epoch:
         version_str = f"{epoch}:{version_str}"
 
-    purl = f"pkg:rpm/redhat/{name}@{version_str}?arch={arch}"
+    purl = f"pkg:rpm/{namespace}/{name}@{version_str}?arch={arch}"
     return purl
 
 

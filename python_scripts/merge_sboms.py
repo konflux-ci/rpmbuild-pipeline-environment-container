@@ -20,8 +20,39 @@ from common_utils import calc_checksum
 from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl
 
 
-SBOM_CREATOR = "Tool: Konflux"
+DEFAULT_CONFIG_PATH = "/etc/rpmbuild_sbom/config.json"
+DEFAULT_SBOM_CREATOR = "Tool: Konflux"
+DEFAULT_DOCUMENT_NAMESPACE = "https://fedoraproject.org/{nvr}.spdx.json"
+DEFAULT_SUPPLIER = "Organization: Fedora"
+
 SBOM_CREATED_TIME = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+# Global config instance, initialized via init_config()
+CONFIG = {
+    "sbom_creator": DEFAULT_SBOM_CREATOR,
+    "document_namespace": DEFAULT_DOCUMENT_NAMESPACE,
+    "supplier": DEFAULT_SUPPLIER,
+    "purl_rpm_namespace": "fedora",
+}
+
+
+def init_config(config_path=None):
+    """Load SBOM generation config from JSON file into global CONFIG.
+
+    :param config_path: Path to config JSON file (default: DEFAULT_CONFIG_PATH)
+    :type config_path: str or None
+    """
+    path = config_path or DEFAULT_CONFIG_PATH
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                user_config = json.load(f)
+            CONFIG.update({k: v for k, v in user_config.items() if k in CONFIG})
+            logging.info("Loaded config from %s", path)
+        except (json.JSONDecodeError, OSError) as e:
+            logging.warning("Failed to load config from %s: %s, using defaults", path, e)
+    elif config_path:
+        logging.warning("Config file not found: %s, using defaults", config_path)
 
 
 def get_params():
@@ -44,6 +75,11 @@ def get_params():
         '--syft-sbom-dir',
         default='.',
         help="Directory containing syft-generated SBOM files for SRPM and binary RPMs (default: current directory)"
+    )
+    parser.add_argument(
+        '--config',
+        default=None,
+        help=f"Path to SBOM config JSON file (default: {DEFAULT_CONFIG_PATH})"
     )
     args = parser.parse_args()
     return args
@@ -84,11 +120,11 @@ def create_base_sbom(rpm_dir):
         "creationInfo": {
             "created": SBOM_CREATED_TIME,
             "creators": [
-                SBOM_CREATOR
+                CONFIG["sbom_creator"]
             ],
         },
         "name": nvr,
-        "documentNamespace": f"https://www.redhat.com/{nvr}.spdx.json",
+        "documentNamespace": CONFIG["document_namespace"].format(nvr=nvr),
         "packages": [],
         "files": [],
         "relationships": [
@@ -138,7 +174,7 @@ def create_base_sbom(rpm_dir):
             "SPDXID": spdxid,
             "name": rpminfo['name'],
             "versionInfo": f"{rpminfo['version']}-{rpminfo['release']}",
-            "supplier": "Organization: Red Hat",
+            "supplier": CONFIG["supplier"],
             "downloadLocation": "NOASSERTION",
             "packageFileName": rpm,
             "licenseDeclared": spdx_license,
@@ -151,7 +187,8 @@ def create_base_sbom(rpm_dir):
                         version=rpminfo['version'],
                         release=rpminfo['release'],
                         arch=rpminfo['arch'],
-                        epoch=rpminfo.get('epoch')
+                        epoch=rpminfo.get('epoch'),
+                        namespace=CONFIG["purl_rpm_namespace"],
                     ),
                 }
             ],
@@ -514,7 +551,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
                 "downloadLocation": rpm.get("url", "NOASSERTION"),
                 "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
-                "supplier": "Organization: Red Hat",
+                "supplier": CONFIG["supplier"],
                 "annotations": []
             }
 
@@ -523,7 +560,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             if sigmd5:
                 pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
-                    "annotator": SBOM_CREATOR,
+                    "annotator": CONFIG["sbom_creator"],
                     "annotationDate": SBOM_CREATED_TIME,
                     "comment": f"sigmd5: {sigmd5}",
                 })
@@ -532,7 +569,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             if sha256header:
                 pkg_dict["annotations"].append({
                     "annotationType": "OTHER",
-                    "annotator": SBOM_CREATOR,
+                    "annotator": CONFIG["sbom_creator"],
                     "annotationDate": SBOM_CREATED_TIME,
                     "comment": f"sha256header: {sha256header}",
                 })
@@ -546,7 +583,8 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
                     version=rpm["version"],
                     release=rpm["release"],
                     arch=rpm["arch"],
-                    epoch=rpm.get("epoch")
+                    epoch=rpm.get("epoch"),
+                    namespace=CONFIG["purl_rpm_namespace"],
                 )
             }]
 
@@ -646,6 +684,7 @@ def merge_sboms(
 
 def _main():
     args = get_params()
+    init_config(args.config)
 
     # Generate base SBOM from RPM directory
     root_sbom = create_base_sbom(args.rpm_dir)
