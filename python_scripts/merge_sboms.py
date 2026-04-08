@@ -88,6 +88,30 @@ def get_params():
     return args
 
 
+def _add_rpm_annotations(pkg_dict, sigmd5, sha256header):
+    """Add sigmd5 and sha256header annotations to a package dict.
+
+    :param pkg_dict: SPDX package dictionary to add annotations to
+    :type pkg_dict: dict
+    :param sigmd5: RPM sigmd5 value (may be None)
+    :param sha256header: RPM sha256header value (may be None)
+    """
+    if sigmd5:
+        pkg_dict.setdefault("annotations", []).append({
+            "annotationType": "OTHER",
+            "annotator": CONFIG["annotator"],
+            "annotationDate": SBOM_CREATED_TIME,
+            "comment": f"sigmd5: {sigmd5}",
+        })
+    if sha256header:
+        pkg_dict.setdefault("annotations", []).append({
+            "annotationType": "OTHER",
+            "annotator": CONFIG["annotator"],
+            "annotationDate": SBOM_CREATED_TIME,
+            "comment": f"sha256header: {sha256header}",
+        })
+
+
 def create_base_sbom(rpm_dir):
     """Generate base SBOM from RPM directory.
 
@@ -200,6 +224,10 @@ def create_base_sbom(rpm_dir):
                 }
             ],
         })
+
+        _add_rpm_annotations(
+            sbom['packages'][-1], rpminfo.get('sigmd5'), rpminfo.get('sha256header')
+        )
 
         # All binary RPMs are generated from SRPM
         if rpminfo['arch'] != "src":
@@ -553,27 +581,9 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
                 "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
                 "supplier": CONFIG["supplier"],
-                "annotations": []
             }
 
-            # Add checksum if sigmd5 as an annotation
-            sigmd5 = rpm.get("sigmd5")
-            if sigmd5:
-                pkg_dict["annotations"].append({
-                    "annotationType": "OTHER",
-                    "annotator": CONFIG["annotator"],
-                    "annotationDate": SBOM_CREATED_TIME,
-                    "comment": f"sigmd5: {sigmd5}",
-                })
-            # Add sha256header if sha256header as an annotation (mock doesn't provide it yet)
-            sha256header = rpm.get("sha256header")
-            if sha256header:
-                pkg_dict["annotations"].append({
-                    "annotationType": "OTHER",
-                    "annotator": CONFIG["annotator"],
-                    "annotationDate": SBOM_CREATED_TIME,
-                    "comment": f"sha256header: {sha256header}",
-                })
+            _add_rpm_annotations(pkg_dict, rpm.get("sigmd5"), rpm.get("sha256header"))
 
             # Add RPM purl as external reference
             pkg_dict["externalRefs"] = [{
