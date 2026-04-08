@@ -21,11 +21,99 @@ from merge_sboms import (
     attach_syft_sboms,
     _find_rpm_packages,
     _rename_doc_root_id,
+    _add_rpm_annotations,
     DEFAULT_SBOM_CREATORS,
     DEFAULT_ANNOTATOR,
     DEFAULT_DOCUMENT_NAMESPACE,
     DEFAULT_SUPPLIER,
+    SBOM_CREATED_TIME,
 )
+
+
+class TestAddRpmAnnotations(unittest.TestCase):
+    """Unit tests for _add_rpm_annotations function."""
+
+    def test_add_sigmd5_only(self):
+        """Test adding sigmd5 annotation only."""
+        pkg_dict = {"SPDXID": "SPDXRef-test"}
+        _add_rpm_annotations(pkg_dict, "abc123def456", None)
+
+        self.assertIn("annotations", pkg_dict)
+        self.assertEqual(len(pkg_dict["annotations"]), 1)
+        self.assertEqual(pkg_dict["annotations"][0]["annotationType"], "OTHER")
+        self.assertEqual(pkg_dict["annotations"][0]["annotator"], CONFIG["annotator"])
+        self.assertEqual(pkg_dict["annotations"][0]["annotationDate"], SBOM_CREATED_TIME)
+        self.assertEqual(pkg_dict["annotations"][0]["comment"], "sigmd5: abc123def456")
+
+    def test_add_sha256header_only(self):
+        """Test adding sha256header annotation only."""
+        pkg_dict = {"SPDXID": "SPDXRef-test"}
+        _add_rpm_annotations(pkg_dict, None, "fedcba987654")
+
+        self.assertIn("annotations", pkg_dict)
+        self.assertEqual(len(pkg_dict["annotations"]), 1)
+        self.assertEqual(pkg_dict["annotations"][0]["annotationType"], "OTHER")
+        self.assertEqual(pkg_dict["annotations"][0]["annotator"], CONFIG["annotator"])
+        self.assertEqual(pkg_dict["annotations"][0]["annotationDate"], SBOM_CREATED_TIME)
+        self.assertEqual(pkg_dict["annotations"][0]["comment"], "sha256header: fedcba987654")
+
+    def test_add_both_annotations(self):
+        """Test adding both sigmd5 and sha256header annotations."""
+        pkg_dict = {"SPDXID": "SPDXRef-test"}
+        _add_rpm_annotations(pkg_dict, "abc123", "xyz789")
+
+        self.assertIn("annotations", pkg_dict)
+        self.assertEqual(len(pkg_dict["annotations"]), 2)
+
+        # Check first annotation is sigmd5
+        self.assertEqual(pkg_dict["annotations"][0]["annotationType"], "OTHER")
+        self.assertEqual(pkg_dict["annotations"][0]["annotator"], CONFIG["annotator"])
+        self.assertEqual(pkg_dict["annotations"][0]["annotationDate"], SBOM_CREATED_TIME)
+        self.assertEqual(pkg_dict["annotations"][0]["comment"], "sigmd5: abc123")
+
+        # Check second annotation is sha256header
+        self.assertEqual(pkg_dict["annotations"][1]["annotationType"], "OTHER")
+        self.assertEqual(pkg_dict["annotations"][1]["annotator"], CONFIG["annotator"])
+        self.assertEqual(pkg_dict["annotations"][1]["annotationDate"], SBOM_CREATED_TIME)
+        self.assertEqual(pkg_dict["annotations"][1]["comment"], "sha256header: xyz789")
+
+    def test_add_neither_annotation(self):
+        """Test with neither sigmd5 nor sha256header."""
+        pkg_dict = {"SPDXID": "SPDXRef-test"}
+        _add_rpm_annotations(pkg_dict, None, None)
+
+        # Should not create annotations key if neither value provided
+        self.assertNotIn("annotations", pkg_dict)
+
+    def test_existing_annotations_preserved(self):
+        """Test that existing annotations are preserved."""
+        pkg_dict = {
+            "SPDXID": "SPDXRef-test",
+            "annotations": [
+                {
+                    "annotationType": "REVIEW",
+                    "annotator": "Person: Reviewer",
+                    "annotationDate": "2024-01-01T00:00:00Z",
+                    "comment": "Existing annotation"
+                }
+            ]
+        }
+        _add_rpm_annotations(pkg_dict, "abc123", "xyz789")
+
+        self.assertEqual(len(pkg_dict["annotations"]), 3)
+        # First annotation is the existing one
+        self.assertEqual(pkg_dict["annotations"][0]["comment"], "Existing annotation")
+        # New annotations added after
+        self.assertEqual(pkg_dict["annotations"][1]["comment"], "sigmd5: abc123")
+        self.assertEqual(pkg_dict["annotations"][2]["comment"], "sha256header: xyz789")
+
+    def test_empty_string_not_added(self):
+        """Test that empty strings are not added as annotations."""
+        pkg_dict = {"SPDXID": "SPDXRef-test"}
+        _add_rpm_annotations(pkg_dict, "", "")
+
+        # Empty strings are falsy, so no annotations should be added
+        self.assertNotIn("annotations", pkg_dict)
 
 
 class TestAttachSources(unittest.TestCase):
@@ -657,6 +745,81 @@ class TestCreateBaseSbom(unittest.TestCase):
                 "[CRITICAL] Binary RPM foo-1.0-1.el9.noarch.rpm has sourcerpm header bar-2.0-1.el9.src.rpm"
                 " that does not match expected SRPM foo-1.0-1.el9.src.rpm",
             )
+
+    @patch('merge_sboms.to_spdx_license', return_value="MIT")
+    @patch('merge_sboms.calc_checksum', return_value="abc123")
+    @patch('merge_sboms.koji')
+    def test_base_sbom_adds_rpm_annotations(self, mock_koji, _mock_checksum, _mock_license):
+        """Test create_base_sbom adds RPM annotations for sigmd5 and sha256header."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["test-1.0-1.el9.src.rpm", "test-1.0-1.el9.x86_64.rpm"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding='utf-8'):
+                    pass
+
+            # SRPM with both sigmd5 and sha256header
+            # Binary RPM with sigmd5 only
+            mock_koji.get_header_fields.side_effect = [
+                {"name": "test", "version": "1.0", "release": "1.el9",
+                 "arch": "x86_64", "description": "test", "license": "MIT",
+                 "sigmd5": "srpm-sigmd5", "sha256header": "srpm-sha256",
+                 "sourcepackage": 1, "sourcerpm": None},
+                {"name": "test", "version": "1.0", "release": "1.el9",
+                 "arch": "x86_64", "description": "test", "license": "MIT",
+                 "sigmd5": "rpm-sigmd5", "sha256header": None,
+                 "sourcepackage": None, "sourcerpm": "test-1.0-1.el9.src.rpm"},
+            ]
+
+            sbom = create_base_sbom(tmpdir)
+
+        # Check SRPM package has both annotations
+        srpm_pkg = sbom['packages'][0]
+        self.assertEqual(srpm_pkg['SPDXID'], "SPDXRef-SRPM")
+        self.assertIn("annotations", srpm_pkg)
+        self.assertEqual(len(srpm_pkg['annotations']), 2)
+
+        # Verify sigmd5 annotation
+        sigmd5_annot = [a for a in srpm_pkg['annotations'] if 'sigmd5' in a['comment']][0]
+        self.assertEqual(sigmd5_annot['annotationType'], 'OTHER')
+        self.assertEqual(sigmd5_annot['annotator'], CONFIG['annotator'])
+        self.assertEqual(sigmd5_annot['comment'], 'sigmd5: srpm-sigmd5')
+
+        # Verify sha256header annotation
+        sha256_annot = [a for a in srpm_pkg['annotations'] if 'sha256header' in a['comment']][0]
+        self.assertEqual(sha256_annot['annotationType'], 'OTHER')
+        self.assertEqual(sha256_annot['annotator'], CONFIG['annotator'])
+        self.assertEqual(sha256_annot['comment'], 'sha256header: srpm-sha256')
+
+        # Check binary RPM package has sigmd5 annotation only
+        bin_pkg = sbom['packages'][1]
+        self.assertEqual(bin_pkg['SPDXID'], "SPDXRef-x86_64-test")
+        self.assertIn("annotations", bin_pkg)
+        self.assertEqual(len(bin_pkg['annotations']), 1)
+        self.assertEqual(bin_pkg['annotations'][0]['comment'], 'sigmd5: rpm-sigmd5')
+
+    @patch('merge_sboms.to_spdx_license', return_value="MIT")
+    @patch('merge_sboms.calc_checksum', return_value="abc123")
+    @patch('merge_sboms.koji')
+    def test_base_sbom_no_annotations_when_none(self, mock_koji, _mock_checksum, _mock_license):
+        """Test create_base_sbom does not add annotations when headers are None."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["test-1.0-1.el9.src.rpm"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding='utf-8'):
+                    pass
+
+            # SRPM without sigmd5 or sha256header
+            mock_koji.get_header_fields.side_effect = [
+                {"name": "test", "version": "1.0", "release": "1.el9",
+                 "arch": "x86_64", "description": "test", "license": "MIT",
+                 "sigmd5": None, "sha256header": None,
+                 "sourcepackage": 1, "sourcerpm": None},
+            ]
+
+            sbom = create_base_sbom(tmpdir)
+
+        # Check SRPM package has no annotations
+        srpm_pkg = sbom['packages'][0]
+        self.assertEqual(srpm_pkg['SPDXID'], "SPDXRef-SRPM")
+        self.assertNotIn("annotations", srpm_pkg)
 
 
 class TestMergeSboms(unittest.TestCase):
