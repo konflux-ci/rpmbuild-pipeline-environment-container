@@ -13,12 +13,17 @@ from unittest.mock import patch
 
 from merge_sboms import (
     _main as merge_sboms,
+    CONFIG,
+    init_config,
     create_base_sbom,
     attach_sources,
     attach_buildroot_packages,
     attach_syft_sboms,
     _find_rpm_packages,
     _rename_doc_root_id,
+    DEFAULT_SBOM_CREATOR,
+    DEFAULT_DOCUMENT_NAMESPACE,
+    DEFAULT_SUPPLIER,
 )
 
 
@@ -308,7 +313,7 @@ class TestAttachBuildrootPackages(unittest.TestCase):
             self.assertEqual(gcc_pkg['name'], 'gcc')
             self.assertEqual(gcc_pkg['versionInfo'], '11.3.1-4.el9')
             self.assertEqual(gcc_pkg['licenseDeclared'], 'GPL-3.0-or-later')
-            self.assertEqual(gcc_pkg['supplier'], 'Organization: Red Hat')
+            self.assertEqual(gcc_pkg['supplier'], 'Organization: Fedora')
 
             # Check annotations (sigmd5 is stored as annotation)
             self.assertEqual(len(gcc_pkg['annotations']), 1)
@@ -317,7 +322,7 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Check purl
             self.assertEqual(len(gcc_pkg['externalRefs']), 1)
-            self.assertIn('pkg:rpm/redhat/gcc@11.3.1-4.el9?arch=x86_64',
+            self.assertIn('pkg:rpm/fedora/gcc@11.3.1-4.el9?arch=x86_64',
                           gcc_pkg['externalRefs'][0]['referenceLocator'])
 
             # Check relationships - should have 2 CONTAINS relationships
@@ -1064,6 +1069,111 @@ class TestAttachSyftSboms(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             attach_syft_sboms(sbom_root, None)
         self.assertIn("syft_sbom_dir parameter is required", str(cm.exception))
+
+
+class TestInitConfig(unittest.TestCase):
+    """Unit tests for init_config function."""
+
+    def _reset_config(self):
+        """Reset CONFIG to defaults."""
+        CONFIG.update({
+            "sbom_creator": DEFAULT_SBOM_CREATOR,
+            "document_namespace": DEFAULT_DOCUMENT_NAMESPACE,
+            "supplier": DEFAULT_SUPPLIER,
+            "purl_rpm_namespace": "fedora",
+        })
+
+    def setUp(self):
+        self._reset_config()
+
+    def tearDown(self):
+        self._reset_config()
+
+    def test_loads_valid_config(self):
+        """Test loading a valid config file overrides defaults."""
+        config_data = {
+            "sbom_creator": "Tool: MyTool",
+            "supplier": "Organization: ACME",
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            init_config(config_path)
+            self.assertEqual(CONFIG["sbom_creator"], "Tool: MyTool")
+            self.assertEqual(CONFIG["supplier"], "Organization: ACME")
+            # Unchanged keys keep defaults
+            self.assertEqual(CONFIG["document_namespace"], DEFAULT_DOCUMENT_NAMESPACE)
+            self.assertEqual(CONFIG["purl_rpm_namespace"], "fedora")
+        finally:
+            os.unlink(config_path)
+
+    def test_ignores_unknown_keys(self):
+        """Test that unknown keys in config file are ignored."""
+        config_data = {
+            "sbom_creator": "Tool: Custom",
+            "unknown_key": "should be ignored",
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            init_config(config_path)
+            self.assertEqual(CONFIG["sbom_creator"], "Tool: Custom")
+            self.assertNotIn("unknown_key", CONFIG)
+        finally:
+            os.unlink(config_path)
+
+    def test_missing_explicit_path_keeps_defaults(self):
+        """Test that a nonexistent explicit path logs warning and keeps defaults."""
+        init_config("/nonexistent/path/config.json")
+        self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+        self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
+
+    def test_missing_default_path_keeps_defaults(self):
+        """Test that missing default config path keeps defaults silently."""
+        init_config(None)
+        self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+        self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
+
+    def test_invalid_json_keeps_defaults(self):
+        """Test that invalid JSON in config file keeps defaults."""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            f.write("not valid json{{{")
+            config_path = f.name
+
+        try:
+            init_config(config_path)
+            self.assertEqual(CONFIG["sbom_creator"], DEFAULT_SBOM_CREATOR)
+            self.assertEqual(CONFIG["supplier"], DEFAULT_SUPPLIER)
+        finally:
+            os.unlink(config_path)
+
+    def test_all_keys_configurable(self):
+        """Test that all CONFIG keys can be overridden."""
+        config_data = {
+            "sbom_creator": "Tool: X",
+            "document_namespace": "https://example.com/{nvr}.spdx.json",
+            "supplier": "Organization: X",
+            "purl_rpm_namespace": "centos",
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(config_data, f)
+            config_path = f.name
+
+        try:
+            init_config(config_path)
+            self.assertEqual(CONFIG["sbom_creator"], "Tool: X")
+            self.assertEqual(CONFIG["document_namespace"], "https://example.com/{nvr}.spdx.json")
+            self.assertEqual(CONFIG["supplier"], "Organization: X")
+            self.assertEqual(CONFIG["purl_rpm_namespace"], "centos")
+        finally:
+            os.unlink(config_path)
 
 
 if __name__ == "__main__":

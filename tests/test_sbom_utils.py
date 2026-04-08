@@ -94,7 +94,7 @@ class TestGetRpmPurl(unittest.TestCase):
             release="4.el9",
             arch="x86_64"
         )
-        self.assertEqual(purl, "pkg:rpm/redhat/gcc@11.3.1-4.el9?arch=x86_64")
+        self.assertEqual(purl, "pkg:rpm/fedora/gcc@11.3.1-4.el9?arch=x86_64")
 
     def test_rpm_purl_with_epoch(self):
         """Test RPM purl with epoch."""
@@ -105,7 +105,7 @@ class TestGetRpmPurl(unittest.TestCase):
             arch="aarch64",
             epoch="2"
         )
-        self.assertEqual(purl, "pkg:rpm/redhat/systemd@2:252-13.el9?arch=aarch64")
+        self.assertEqual(purl, "pkg:rpm/fedora/systemd@2:252-13.el9?arch=aarch64")
 
     def test_rpm_purl_noarch(self):
         """Test RPM purl with noarch architecture."""
@@ -115,7 +115,7 @@ class TestGetRpmPurl(unittest.TestCase):
             release="7.el9",
             arch="noarch"
         )
-        self.assertEqual(purl, "pkg:rpm/redhat/python3-pip@21.2.3-7.el9?arch=noarch")
+        self.assertEqual(purl, "pkg:rpm/fedora/python3-pip@21.2.3-7.el9?arch=noarch")
 
 
 class TestToSpdxLicense(unittest.TestCase):
