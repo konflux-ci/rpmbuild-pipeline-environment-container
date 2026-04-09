@@ -374,6 +374,44 @@ class TestListSpecSources(unittest.TestCase):
         self.assertEqual(src["url"], "ftp://ftp.example.com/pub/package-3.0.tar.bz2")
         self.assertEqual(src["filename"], "package-3.0.tar.bz2")
 
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_signature_files_skipped(self, _mock_checksum, mock_parse):
+        """Test that .sig and .asc signature files are skipped."""
+        mock_parse.return_value = {
+            "0": "https://example.com/pkg-1.0.tar.gz",
+            "1": "https://example.com/pkg-1.0.tar.gz.sig",
+            "2": "https://example.com/pkg-1.0.tar.gz.asc",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["pkg-1.0.tar.gz", "pkg-1.0.tar.gz.sig", "pkg-1.0.tar.gz.asc"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding="utf-8") as f:
+                    f.write("dummy")
+
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["filename"], "pkg-1.0.tar.gz")
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_local_sig_files_skipped(self, _mock_checksum, mock_parse):
+        """Test that local .sig and .asc files are skipped."""
+        mock_parse.return_value = {
+            "0": "pkg-1.0.tar.gz",
+            "1": "pkg-1.0.tar.gz.sig",
+            "2": "pkg-1.0.tar.gz.asc",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["pkg-1.0.tar.gz", "pkg-1.0.tar.gz.sig", "pkg-1.0.tar.gz.asc"]:
+                with open(os.path.join(tmpdir, name), 'w', encoding="utf-8") as f:
+                    f.write("dummy")
+
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["filename"], "pkg-1.0.tar.gz")
+
 
 class TestListSources(unittest.TestCase):
     """
