@@ -220,6 +220,11 @@ def list_spec_sources(specfile, srcdir="."):
     for source_num, loc in source_tags.items():
         source_tag = f"Source{source_num}"
 
+        # Skip signature files (.sig, .asc) - they are not source archives
+        if loc.lower().endswith((".sig", ".asc")):
+            logging.debug("%s: skipping signature file %s", source_tag, loc)
+            continue
+
         # Extract filename from location
         # If it's a URL, filename is the last component
         # If it's a local path, use basename
