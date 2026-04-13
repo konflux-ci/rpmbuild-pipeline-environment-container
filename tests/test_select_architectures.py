@@ -489,15 +489,15 @@ class TestSelectArchitectures(TestCase):
         results = self._run_selected_architectures("dpdk.spec",["--hermetic", "--platform-labels",
                                                                 "linux-beefy/amd64", "linux-beefy/arm64"])
         expected_results = {
+            "deps-i686": "linux/amd64",
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "linux/amd64",
             "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
+            "build-i686": "linux-beefy/amd64",
             "build-x86_64": "linux-beefy/amd64",
             "build-aarch64": "linux-beefy/arm64",
-            "build-i686": "linux-beefy/amd64",
             "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
