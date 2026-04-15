@@ -17,7 +17,7 @@ import pytest
 from select_architectures import _main as select_architectures
 from select_architectures import get_arch_specific_tags
 
-SELECTED_ARCHES = ["x86_64", "ppc64le", "s390x", "aarch64"]
+SELECTED_ARCHES = ["x86_64", "i686", "ppc64le", "s390", "s390x", "aarch64"]
 
 
 class TestSelectArchitectures(TestCase):
@@ -69,11 +69,13 @@ class TestSelectArchitectures(TestCase):
             "deps-x86_64": "linux/amd64",
             "deps-i686": "localhost",
             "deps-aarch64": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "linux/amd64",
             "build-i686": "localhost",
             "build-aarch64": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }
@@ -88,13 +90,15 @@ class TestSelectArchitectures(TestCase):
         # This should build on x86_64, aarch64 and ppc64le
         assert results == {
             "deps-x86_64": "linux/amd64",
-            "deps-i686": "localhost",
+            "deps-i686": "linux/amd64",
             "deps-aarch64": "linux/arm64",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
+            "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }
@@ -106,14 +110,16 @@ class TestSelectArchitectures(TestCase):
         results = self._run_selected_architectures("dpdk.spec")
         # This should build on x86_64, aarch64 and ppc64le
         assert results == {
-            "deps-x86_64": "localhost",
             "deps-i686": "localhost",
+            "deps-x86_64": "localhost",
             "deps-aarch64": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
+            "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }
@@ -129,11 +135,13 @@ class TestSelectArchitectures(TestCase):
             "deps-x86_64": "localhost",
             "deps-i686": "localhost",
             "deps-aarch64": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "linux/amd64",
             "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }
@@ -150,11 +158,13 @@ class TestSelectArchitectures(TestCase):
             "deps-x86_64": "linux/amd64",
             "deps-i686": "localhost",
             "deps-aarch64": "linux/arm64",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
             "build-x86_64": "linux/amd64",
             "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }
@@ -168,25 +178,29 @@ class TestSelectArchitectures(TestCase):
         # ExclusiveArch covers all available_architectures, but excludearch
         # filters-out s390x and ppc64le. Noarch picks x86_64 or aarch64 randomly.
         assert results in [{
+            "deps-i686": "localhost",
             "deps-x86_64": "localhost",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
+            "build-i686": "localhost",
             "build-x86_64": "localhost",
             "build-aarch64": "linux/arm64",
-            "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }, {
+            "deps-i686": "localhost",
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "localhost",
-            "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
+            "build-i686": "localhost",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "localhost",
-            "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }]
@@ -196,16 +210,18 @@ class TestSelectArchitectures(TestCase):
         Test package with ExclusiveArch statement without hermetic option.
         """
         results = self._run_selected_architectures("dummy-exclusive-arch.spec")
-        # exclusivearch cover s390x.
+        # exclusivearch cover s390x. (non-hermetic - no deps tasks)
         assert results == {
             "deps-x86_64": "localhost",
             "deps-i686": "localhost",
             "deps-aarch64": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "localhost",
             "build-i686": "localhost",
             "build-aarch64": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "linux/s390x",
             "build-ppc64le": "localhost"
         }
@@ -222,33 +238,39 @@ class TestSelectArchitectures(TestCase):
             "deps-x86_64": "localhost",
             "deps-aarch64": "localhost",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "localhost",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }, {
             "deps-x86_64": "localhost",
             "deps-aarch64": "localhost",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "localhost",
             "build-aarch64": "linux/arm64",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }, {
             "deps-x86_64": "localhost",
             "deps-aarch64": "localhost",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "localhost",
             "build-aarch64": "localhost",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }]
@@ -265,33 +287,39 @@ class TestSelectArchitectures(TestCase):
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "localhost",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "localhost",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }, {
             "deps-x86_64": "localhost",
             "deps-aarch64": "linux/arm64",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "localhost",
             "build-x86_64": "localhost",
             "build-aarch64": "linux/arm64",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "localhost"
         }, {
             "deps-x86_64": "localhost",
             "deps-aarch64": "localhost",
             "deps-i686": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
             "build-x86_64": "localhost",
             "build-aarch64": "localhost",
             "build-i686": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }]
@@ -302,17 +330,18 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dummy-exclude-arch.spec",
                                                    ["--hermetic"])
-        # build on all architectures instead of ExcludeArch s390x and
-        # i686 which is not in the list of selected architectures
+        # build on all architectures instead of ExcludeArch s390x
         assert results in [{
+            "deps-i686": "linux/amd64",
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "localhost",
+            "deps-s390": "linux/s390x",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
+            "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
-            "build-i686": "localhost",
+            "build-s390": "linux/s390x",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }]
@@ -371,11 +400,13 @@ class TestSelectArchitectures(TestCase):
             "build-aarch64": "linux/arm64",
             "build-i686": "localhost",
             "build-ppc64le": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-x86_64": "localhost",
             "deps-aarch64": "linux/arm64",
             "deps-i686": "localhost",
             "deps-ppc64le": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-x86_64": "localhost",
         }
@@ -391,11 +422,13 @@ class TestSelectArchitectures(TestCase):
             "build-aarch64": "linux/arm64",
             "build-i686": "localhost",
             "build-ppc64le": "localhost",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
             "deps-i686": "localhost",
             "deps-ppc64le": "localhost",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-x86_64": "linux/amd64",
         }
@@ -458,12 +491,14 @@ class TestSelectArchitectures(TestCase):
         expected_results = {
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "localhost",
+            "deps-i686": "linux/amd64",
+            "deps-s390": "localhost",
             "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
             "build-x86_64": "linux-beefy/amd64",
             "build-aarch64": "linux-beefy/arm64",
-            "build-i686": "localhost",
+            "build-i686": "linux-beefy/amd64",
+            "build-s390": "localhost",
             "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le"
         }

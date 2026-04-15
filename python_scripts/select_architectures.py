@@ -37,24 +37,26 @@ def apply_platform_overrides(platform_labels, architecture_decision):
     keys in architecture_decision.
     """
     arch_map = {
-        "amd64": "x86_64",
-        "arm64": "aarch64",
-        "s390x": "s390x",
-        "ppc64le": "ppc64le",
+        "amd64": ["x86_64", "i686"],
+        "arm64": ["aarch64"],
+        "s390x": ["s390x", "s390"],
+        "ppc64le": ["ppc64le"],
     }
 
     for platform_string in platform_labels:
         found_match = False
 
-        for mpl_arch, target_arch in arch_map.items():
+        for mpl_arch, target_archs in arch_map.items():
             if platform_string.endswith(mpl_arch):
-                found_match = True
+                for target_arch in target_archs:
+                    found_match = True
 
-                build_key = f"build-{target_arch}"
+                    build_key = f"build-{target_arch}"
 
-                if build_key in architecture_decision:
-                    print(f"Applying override for {build_key}: {platform_string}")
-                    architecture_decision[build_key] = platform_string
+                    if build_key in architecture_decision:
+                        print(f"Applying override for {build_key}: {platform_string}")
+                        architecture_decision[build_key] = platform_string
+            if found_match:
                 break
 
         if not found_match:
@@ -146,11 +148,13 @@ def _main():
         "deps-x86_64": "linux/amd64",
         "deps-i686": "linux/amd64",
         "deps-aarch64": "linux/arm64",
+        "deps-s390": "linux/s390x",
         "deps-s390x": "linux/s390x",
         "deps-ppc64le": "linux/ppc64le",
         "build-x86_64": "linux/amd64",
         "build-i686": "linux/amd64",
         "build-aarch64": "linux/arm64",
+        "build-s390": "linux/s390x",
         "build-s390x": "linux/s390x",
         "build-ppc64le": "linux/ppc64le",
     }
