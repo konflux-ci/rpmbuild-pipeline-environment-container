@@ -9,6 +9,8 @@ This module provides common utilities for SBOM-related operations including:
 import logging
 import subprocess
 
+from functools import lru_cache
+
 from common_utils import run_command
 
 
@@ -51,6 +53,19 @@ def get_rpm_purl(name, version, release, arch, *, epoch=None, namespace="fedora"
     return purl
 
 
+@lru_cache(maxsize=1024)
+def _license_validate(rpm_license):
+    result = run_command(["license-validate", rpm_license], timeout=5)
+    if result.returncode == 0:
+        return result.stdout
+    return None
+
+
+@lru_cache(maxsize=1024)
+def _license_fedora2spdx(rpm_license):
+    return run_command(["license-fedora2spdx", rpm_license], timeout=5).stdout
+
+
 def to_spdx_license(rpm_license):
     """Convert RPM license to SPDX license expression using license-fedora2spdx.
 
@@ -63,17 +78,17 @@ def to_spdx_license(rpm_license):
         return "NOASSERTION"
 
     try:
-        result = run_command(["license-validate", rpm_license], timeout=5)
-        if result.returncode == 0:
+        result = _license_validate(rpm_license)
+        if result is not None:
             logging.debug("Valid SPDX license '%s'", rpm_license)
             return rpm_license
 
-        result = run_command(["license-fedora2spdx", rpm_license], timeout=5)
-        lines = result.stdout.splitlines()
-        if not lines:
+        result = _license_fedora2spdx(rpm_license)
+        if result == '':
             logging.warning("[CRITICAL] license-fedora2spdx returned empty output for license '%s'", rpm_license)
             return "NOASSERTION"
 
+        lines = result.splitlines()
         spdx_license = lines[0].strip()
         if not spdx_license:
             logging.warning("[CRITICAL] license-fedora2spdx returned blank first line for license '%s'", rpm_license)
