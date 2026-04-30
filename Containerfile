@@ -8,7 +8,7 @@ ADD repofiles/fedora-infra.repo /etc/yum.repos.d
 
 RUN \
     dnf -y --nodocs --setopt=install_weak_deps=False install \
-        mock koji dist-git-client patch python3-norpm python3-specfile redhat-rpm-config \
+        mock koji dist-git-client patch python3-norpm python3-specfile python3-click redhat-rpm-config \
         acl rpmautospec jq rpmlint podman skopeo dnf-utils license-validate && \
     patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
     dnf -y clean all && \
