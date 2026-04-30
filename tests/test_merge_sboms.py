@@ -319,6 +319,54 @@ class TestAttachSources(unittest.TestCase):
         finally:
             os.unlink(temp_file)
 
+    def test_attach_sources_none_becomes_unknown(self):
+        """Test that explicit None version becomes 'unknown', not null.
+
+        gen_ancestors_from_src.py can produce version=None for source files
+        whose filenames don't contain a parseable version (e.g. a plain
+        archive name without a hyphen-separated version). SPDX schema
+        does not allow null in the versionInfo field.
+        """
+        sbom_root = {
+            "packages": [],
+            "relationships": []
+        }
+
+        source_data = {
+            "sources": [
+                {
+                    "name": "patches",
+                    "version": None,
+                    "filename": "patches.tar.gz",
+                    "url": "https://example.com/patches.tar.gz",
+                    "alg": "SHA256",
+                    "checksum": "abc123",
+                    "midstream": {
+                        "url": "https://lookaside.com/patches.tar.gz",
+                        "alg": "MD5",
+                        "checksum": "def456"
+                    }
+                }
+            ]
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            json.dump(source_data, f)
+            temp_file = f.name
+
+        try:
+            attach_sources(sbom_root, temp_file)
+
+            source_pkg = sbom_root['packages'][0]
+            self.assertEqual(source_pkg['versionInfo'], 'unknown')
+            self.assertIsNotNone(source_pkg['versionInfo'])
+
+            origin_pkg = sbom_root['packages'][1]
+            self.assertEqual(origin_pkg['versionInfo'], 'unknown')
+            self.assertIsNotNone(origin_pkg['versionInfo'])
+        finally:
+            os.unlink(temp_file)
+
 
 class TestAttachBuildrootPackages(unittest.TestCase):
     """
