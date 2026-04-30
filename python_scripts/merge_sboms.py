@@ -188,7 +188,7 @@ def create_base_sbom(rpm_dir):
             spdxid = "SPDXRef-SRPM"
             rpminfo['arch'] = "src"
         else:
-            spdxid = f"SPDXRef-{rpminfo['arch']}-{rpminfo['name']}"
+            spdxid = f"SPDXRef-{rpminfo['arch']}-{rpminfo['name']}".replace('_', '-')
 
         rpm_spdxids.append(spdxid)
 
@@ -400,7 +400,7 @@ def _rename_doc_root_id(rpm_sbom, nvra):
         return None, None
 
     # Create new root ID
-    new_root_id = f"SPDXRef-Directory-Root-{nvra}"
+    new_root_id = f"SPDXRef-Directory-Root-{nvra}".replace('_', '-')
 
     return old_root_id, new_root_id
 
@@ -550,7 +550,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             target_arch = arch
 
         # Create virtual buildroot package for this architecture
-        virtual_spdx_id = f"SPDXRef-Buildroot-{srpm_name}-{target_arch}"
+        virtual_spdx_id = f"SPDXRef-Buildroot-{srpm_name}-{target_arch}".replace('_', '-')
         sbom_root["packages"].append({
             "SPDXID": virtual_spdx_id,
             "name": f"{srpm_name}-buildroot-{target_arch}",
@@ -565,7 +565,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
 
         for rpm in buildroot_rpms:
             # Create unique SPDXID using rpm name and arch
-            spdx_id = f"SPDXRef-Buildroot-Package-{rpm['name']}-{target_arch}"
+            spdx_id = f"SPDXRef-Buildroot-Package-{rpm['name']}-{target_arch}".replace('_', '-')
 
             # Build version string (version-release with optional epoch prefix)
             version = f"{rpm['version']}-{rpm['release']}"

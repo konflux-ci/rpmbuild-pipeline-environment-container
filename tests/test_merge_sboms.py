@@ -439,14 +439,14 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Check virtual buildroot package
             virtual_pkg = sbom_root['packages'][0]
-            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86_64')
+            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86-64')
             self.assertEqual(virtual_pkg['name'], 'test-pkg-buildroot-x86_64')
             self.assertEqual(virtual_pkg['downloadLocation'], 'NOASSERTION')
             self.assertEqual(virtual_pkg['filesAnalyzed'], False)
 
             # Check first buildroot package
             gcc_pkg = sbom_root['packages'][1]
-            self.assertEqual(gcc_pkg['SPDXID'], 'SPDXRef-Buildroot-Package-gcc-x86_64')
+            self.assertEqual(gcc_pkg['SPDXID'], 'SPDXRef-Buildroot-Package-gcc-x86-64')
             self.assertEqual(gcc_pkg['name'], 'gcc')
             self.assertEqual(gcc_pkg['versionInfo'], '11.3.1-4.el9')
             self.assertEqual(gcc_pkg['licenseDeclared'], 'GPL-3.0-or-later')
@@ -468,10 +468,10 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Verify CONTAINS relationships
             for rel in contains_rels:
-                self.assertEqual(rel['spdxElementId'], 'SPDXRef-Buildroot-test-pkg-x86_64')
+                self.assertEqual(rel['spdxElementId'], 'SPDXRef-Buildroot-test-pkg-x86-64')
                 self.assertIn(rel['relatedSpdxElement'],
-                              ['SPDXRef-Buildroot-Package-gcc-x86_64',
-                               'SPDXRef-Buildroot-Package-glibc-x86_64'])
+                              ['SPDXRef-Buildroot-Package-gcc-x86-64',
+                               'SPDXRef-Buildroot-Package-glibc-x86-64'])
         finally:
             os.unlink(lockfile_path)
             os.unlink(broot_arch_list_file)
@@ -568,13 +568,13 @@ class TestAttachBuildrootPackages(unittest.TestCase):
             # Check virtual packages exist for both architectures
             virtual_ids = [pkg['SPDXID'] for pkg in sbom_root['packages']
                            if pkg['SPDXID'].startswith('SPDXRef-Buildroot-') and '-buildroot-' in pkg['name']]
-            self.assertIn('SPDXRef-Buildroot-test-pkg-x86_64', virtual_ids)
+            self.assertIn('SPDXRef-Buildroot-test-pkg-x86-64', virtual_ids)
             self.assertIn('SPDXRef-Buildroot-test-pkg-aarch64', virtual_ids)
 
             # Check buildroot packages exist for both architectures
             buildroot_ids = [pkg['SPDXID'] for pkg in sbom_root['packages']
                              if pkg['SPDXID'].startswith('SPDXRef-Buildroot-Package-')]
-            self.assertIn('SPDXRef-Buildroot-Package-gcc-x86_64', buildroot_ids)
+            self.assertIn('SPDXRef-Buildroot-Package-gcc-x86-64', buildroot_ids)
             self.assertIn('SPDXRef-Buildroot-Package-gcc-aarch64', buildroot_ids)
 
             # Check BUILD_TOOL_OF relationships
@@ -584,7 +584,7 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Verify x86_64 BUILD_TOOL_OF relationship
             x86_rel = [r for r in build_tool_rels
-                       if r['spdxElementId'] == 'SPDXRef-Buildroot-test-pkg-x86_64'][0]
+                       if r['spdxElementId'] == 'SPDXRef-Buildroot-test-pkg-x86-64'][0]
             self.assertEqual(x86_rel['relatedSpdxElement'], 'SPDXRef-x86-64-test-pkg')
 
             # Verify aarch64 BUILD_TOOL_OF relationship
@@ -708,7 +708,7 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Check virtual buildroot package uses x86_64 from JSON key
             virtual_pkg = sbom_root['packages'][0]
-            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86_64')
+            self.assertEqual(virtual_pkg['SPDXID'], 'SPDXRef-Buildroot-test-pkg-x86-64')
         finally:
             os.unlink(lockfile_path)
             os.unlink(broot_arch_list_file)
@@ -839,7 +839,7 @@ class TestCreateBaseSbom(unittest.TestCase):
 
         # Check binary RPM package has sigmd5 annotation only
         bin_pkg = sbom['packages'][1]
-        self.assertEqual(bin_pkg['SPDXID'], "SPDXRef-x86_64-test")
+        self.assertEqual(bin_pkg['SPDXID'], "SPDXRef-x86-64-test")
         self.assertIn("annotations", bin_pkg)
         self.assertEqual(len(bin_pkg['annotations']), 1)
         self.assertEqual(bin_pkg['annotations'][0]['comment'], 'sigmd5: rpm-sigmd5')
@@ -962,11 +962,11 @@ class TestAttachSyftSboms(unittest.TestCase):
                     "packageFileName": "test-pkg-1.0-1.el9.src.rpm"
                 },
                 {
-                    "SPDXID": "SPDXRef-x86_64-foo",
+                    "SPDXID": "SPDXRef-x86-64-foo",
                     "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
                 },
                 {
-                    "SPDXID": "SPDXRef-x86_64-bar",
+                    "SPDXID": "SPDXRef-x86-64-bar",
                     "packageFileName": "bar-2.0-1.el9.x86_64.rpm"
                 },
                 {
@@ -987,7 +987,7 @@ class TestAttachSyftSboms(unittest.TestCase):
 
         # Verify package references
         self.assertEqual(rpm_packages["test-pkg-1.0-1.el9.src"]["SPDXID"], "SPDXRef-SRPM")
-        self.assertEqual(rpm_packages["foo-1.0-1.el9.x86_64"]["SPDXID"], "SPDXRef-x86_64-foo")
+        self.assertEqual(rpm_packages["foo-1.0-1.el9.x86_64"]["SPDXID"], "SPDXRef-x86-64-foo")
 
     def test_rename_doc_root_id(self):
         """Test _rename_doc_root_id generates correct new ID."""
@@ -1005,7 +1005,7 @@ class TestAttachSyftSboms(unittest.TestCase):
         old_id, new_id = _rename_doc_root_id(syft_sbom, "foo-1.0-1.el9.x86_64")
 
         self.assertEqual(old_id, "SPDXRef-RootDirectory")
-        self.assertEqual(new_id, "SPDXRef-Directory-Root-foo-1.0-1.el9.x86_64")
+        self.assertEqual(new_id, "SPDXRef-Directory-Root-foo-1.0-1.el9.x86-64")
 
     def test_rename_doc_root_id_no_describes(self):
         """Test _rename_doc_root_id returns None when no DESCRIBES relationship."""
@@ -1024,7 +1024,7 @@ class TestAttachSyftSboms(unittest.TestCase):
         sbom_root = {
             "packages": [
                 {
-                    "SPDXID": "SPDXRef-x86_64-python3-requests",
+                    "SPDXID": "SPDXRef-x86-64-python3-requests",
                     "packageFileName": "python3-requests-2.28.1-1.el9.x86_64.rpm",
                     "name": "python3-requests"
                 }
@@ -1074,7 +1074,7 @@ class TestAttachSyftSboms(unittest.TestCase):
 
         # Check root directory was renamed
         root_pkg = [p for p in sbom_root["packages"] if "Directory-Root" in p["SPDXID"]][0]
-        self.assertEqual(root_pkg["SPDXID"], "SPDXRef-Directory-Root-python3-requests-2.28.1-1.el9.x86_64")
+        self.assertEqual(root_pkg["SPDXID"], "SPDXRef-Directory-Root-python3-requests-2.28.1-1.el9.x86-64")
 
         # Check other package is included
         urllib3_pkg = [p for p in sbom_root["packages"] if p.get("name") == "urllib3"][0]
@@ -1082,10 +1082,10 @@ class TestAttachSyftSboms(unittest.TestCase):
 
         # Check CONTAINS relationship from RPM to root directory
         rpm_contains_rel = [r for r in sbom_root["relationships"]
-                            if r["spdxElementId"] == "SPDXRef-x86_64-python3-requests"
+                            if r["spdxElementId"] == "SPDXRef-x86-64-python3-requests"
                             and r["relationshipType"] == "CONTAINS"][0]
         self.assertEqual(rpm_contains_rel["relatedSpdxElement"],
-                         "SPDXRef-Directory-Root-python3-requests-2.28.1-1.el9.x86_64")
+                         "SPDXRef-Directory-Root-python3-requests-2.28.1-1.el9.x86-64")
 
         # Check internal relationships are preserved
         internal_rel = [r for r in sbom_root["relationships"]
@@ -1098,11 +1098,11 @@ class TestAttachSyftSboms(unittest.TestCase):
         sbom_root = {
             "packages": [
                 {
-                    "SPDXID": "SPDXRef-x86_64-foo",
+                    "SPDXID": "SPDXRef-x86-64-foo",
                     "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
                 },
                 {
-                    "SPDXID": "SPDXRef-x86_64-bar",
+                    "SPDXID": "SPDXRef-x86-64-bar",
                     "packageFileName": "bar-2.0-1.el9.x86_64.rpm"
                 }
             ],
@@ -1148,8 +1148,8 @@ class TestAttachSyftSboms(unittest.TestCase):
 
         # Verify both roots were renamed uniquely
         spdx_ids = [p["SPDXID"] for p in sbom_root["packages"]]
-        self.assertIn("SPDXRef-Directory-Root-foo-1.0-1.el9.x86_64", spdx_ids)
-        self.assertIn("SPDXRef-Directory-Root-bar-2.0-1.el9.x86_64", spdx_ids)
+        self.assertIn("SPDXRef-Directory-Root-foo-1.0-1.el9.x86-64", spdx_ids)
+        self.assertIn("SPDXRef-Directory-Root-bar-2.0-1.el9.x86-64", spdx_ids)
 
     def test_attach_syft_sboms_srpm(self):
         """Test attaching a syft SBOM for an SRPM."""
@@ -1219,7 +1219,7 @@ class TestAttachSyftSboms(unittest.TestCase):
         sbom_root = {
             "packages": [
                 {
-                    "SPDXID": "SPDXRef-x86_64-foo",
+                    "SPDXID": "SPDXRef-x86-64-foo",
                     "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
                 }
             ],
@@ -1254,7 +1254,7 @@ class TestAttachSyftSboms(unittest.TestCase):
         sbom_root = {
             "packages": [
                 {
-                    "SPDXID": "SPDXRef-x86_64-foo",
+                    "SPDXID": "SPDXRef-x86-64-foo",
                     "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
                 }
             ],
