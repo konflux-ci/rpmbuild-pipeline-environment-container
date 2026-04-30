@@ -275,7 +275,7 @@ def attach_sources(sbom_root, source_data_file):
         source_pkg = {
             "SPDXID": f"SPDXRef-Source{idx}",
             "name": source["name"],
-            "versionInfo": source.get("version", "unknown"),
+            "versionInfo": source.get("version") or "unknown",
             "packageFileName": source["filename"],
             "downloadLocation": midstream.get("url", "NOASSERTION"),
             "filesAnalyzed": False,
@@ -315,7 +315,7 @@ def attach_sources(sbom_root, source_data_file):
             upstream_pkg = {
                 "SPDXID": f"SPDXRef-Source{idx}-origin",
                 "name": source["name"],
-                "versionInfo": source.get("version", "unknown"),
+                "versionInfo": source.get("version") or "unknown",
                 "downloadLocation": source.get("url"),
                 "packageFileName": source["filename"],
                 "filesAnalyzed": False,
