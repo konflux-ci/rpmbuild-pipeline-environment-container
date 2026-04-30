@@ -326,18 +326,37 @@ class TestListSpecSources(unittest.TestCase):
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
     @patch("gen_ancestors_from_src.calc_checksum", return_value="abc123")
     def test_url_with_fragment(self, _mock_checksum, mock_parse):
-        """Test URL with fragment (#) is handled correctly."""
+        """Test URL with #/ fragment uses the renamed filename."""
         mock_parse.return_value = {
             "0": "https://example.com/pkg-2.0.tar.gz#/renamed.tar.gz"
         }
         with tempfile.TemporaryDirectory() as tmpdir:
-            source_path = os.path.join(tmpdir, "pkg-2.0.tar.gz")
+            source_path = os.path.join(tmpdir, "renamed.tar.gz")
             with open(source_path, 'w', encoding="utf-8") as f:
                 f.write("dummy")
 
             sources = list_spec_sources("fake.spec", tmpdir)
 
-        self.assertEqual(sources[0]["filename"], "pkg-2.0.tar.gz")
+        self.assertEqual(sources[0]["filename"], "renamed.tar.gz")
+        self.assertEqual(sources[0]["url"], "https://example.com/pkg-2.0.tar.gz#/renamed.tar.gz")
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="abc123")
+    def test_url_with_fragment_github_archive(self, _mock_checksum, mock_parse):
+        """Test GitHub archive URL with #/ fragment rename (real-world pattern)."""
+        mock_parse.return_value = {
+            "0": "https://github.com/capstone-engine/capstone/archive/5.0.7.tar.gz#/capstone-5.0.7.tar.gz"
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = os.path.join(tmpdir, "capstone-5.0.7.tar.gz")
+            with open(source_path, 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
+            sources = list_spec_sources("fake.spec", tmpdir)
+
+        self.assertEqual(sources[0]["filename"], "capstone-5.0.7.tar.gz")
+        self.assertEqual(sources[0]["name"], "capstone")
+        self.assertEqual(sources[0]["version"], "5.0.7")
 
     @patch("gen_ancestors_from_src.parse_spec_source_tags")
     @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")

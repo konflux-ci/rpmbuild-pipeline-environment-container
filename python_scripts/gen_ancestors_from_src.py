@@ -230,7 +230,11 @@ def list_spec_sources(specfile, srcdir="."):
         # If it's a local path, use basename
         if loc.startswith(UPSTREAM_URL_SCHEMES):
             url = loc
-            sfn = os.path.basename(url.split("#")[0])  # Remove fragment, get basename
+            if "#/" in loc:
+                # RPM convention: #/filename renames the downloaded file
+                sfn = loc.split("#/", 1)[1]
+            else:
+                sfn = os.path.basename(url.split("#")[0])
         else:
             url = None
             sfn = os.path.basename(loc)
