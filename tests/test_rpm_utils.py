@@ -13,6 +13,7 @@ from rpm_utils import (
     create_macro_registry,
     SourceHooks,
     parse_spec_source_tags,
+    _parse_source_tags_literal,
 )
 
 
@@ -279,6 +280,349 @@ Test package
 
             source_tags = parse_spec_source_tags(spec_path, tmpdir)
             self.assertGreaterEqual(len(source_tags), 0)
+
+    def test_parse_with_expand_false(self):
+        """Test parsing with expand=False uses literal parser."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create an already-expanded spec with escaped macros
+            spec_content = """
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+Source1: local-file.txt
+
+%changelog
+* Mon Jan 01 2024 Test User <test@example.com> - 1.0-1
+- Some %escaped_macro should not be re-expanded
+"""
+            spec_path = os.path.join(tmpdir, "expanded.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = parse_spec_source_tags(spec_path, tmpdir, expand=False)
+
+            self.assertEqual(len(source_tags), 2)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
+            self.assertEqual(source_tags["1"], "local-file.txt")
+
+    def test_parse_with_expand_true_default(self):
+        """Test that expand=True is the default behavior."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/testpkg-%{version}.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            # Default behavior should expand macros
+            source_tags = parse_spec_source_tags(spec_path, tmpdir)
+            # The %{version} macro should be expanded to 1.0
+            self.assertIn("0", source_tags)
+            self.assertIn("1.0", source_tags["0"])
+
+
+class TestParseSourceTagsLiteral(unittest.TestCase):
+    """
+    Unit tests for _parse_source_tags_literal function.
+    """
+
+    def test_parse_simple_source(self):
+        """Test parsing a simple already-expanded spec."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            self.assertEqual(source_tags, {"0": "https://example.com/testpkg-1.0.tar.gz"})
+
+    def test_parse_multiple_sources_literal(self):
+        """Test parsing multiple sources literally."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 2.0
+
+Source0: https://example.com/testpkg-2.0.tar.gz
+Source1: https://example.com/patch1.patch
+Source2: local-file.txt
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+
+            self.assertEqual(len(source_tags), 3)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-2.0.tar.gz")
+            self.assertEqual(source_tags["1"], "https://example.com/patch1.patch")
+            self.assertEqual(source_tags["2"], "local-file.txt")
+
+    def test_parse_source_without_number(self):
+        """Test parsing Source tag without number (defaults to 0)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Source: https://example.com/file.tar.gz
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            self.assertEqual(source_tags["0"], "https://example.com/file.tar.gz")
+
+    def test_parse_source_with_sourcedir_macro(self):
+        """Test that %{_sourcedir} macro is replaced with srcdir in literal parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Source0: %{_sourcedir}/testpkg-1.0.tar.gz
+Source1: ${_sourcedir}/patch.txt
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # %{_sourcedir} should be replaced with srcdir
+            self.assertEqual(source_tags["0"], tmpdir + "/testpkg-1.0.tar.gz")
+            self.assertEqual(source_tags["1"], tmpdir + "/patch.txt")
+
+    def test_parse_case_insensitive(self):
+        """Test that Source tag matching is case-insensitive."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+SOURCE0: https://example.com/file1.tar.gz
+source1: https://example.com/file2.tar.gz
+Source2: https://example.com/file3.tar.gz
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            self.assertEqual(len(source_tags), 3)
+            self.assertIn("0", source_tags)
+            self.assertIn("1", source_tags)
+            self.assertIn("2", source_tags)
+
+    def test_parse_ignores_non_source_lines(self):
+        """Test that non-Source lines are ignored."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+Release: 1%{?dist}
+Source0: https://example.com/testpkg-1.0.tar.gz
+Patch0: fix-bug.patch
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should only have Source0, not Patch0 or other tags
+            self.assertEqual(len(source_tags), 1)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
+
+    def test_parse_with_escaped_macros_in_changelog(self):
+        """Test that escaped macros in changelog don't cause issues."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+
+%description
+Test package
+
+%changelog
+* Mon Jan 01 2024 Test User <test@example.com> - 1.0-1
+- Fixed %escaped_macro in code
+- Updated %another_macro reference
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            # This should not fail even with escaped macros in changelog
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
+
+    def test_parse_stops_at_section_directives(self):
+        """Test that parser stops at % section directives and doesn't parse changelog."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/real-source.tar.gz
+Source1: https://example.com/real-patch.patch
+
+%description
+Test package
+
+%changelog
+* Mon Jan 01 2024 Test User <test@example.com> - 1.0-1
+- Source0: This should NOT be parsed as a source tag
+- Source2: Neither should this
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+
+            # Should only have Source0 and Source1 from preamble
+            self.assertEqual(len(source_tags), 2)
+            self.assertEqual(source_tags["0"], "https://example.com/real-source.tar.gz")
+            self.assertEqual(source_tags["1"], "https://example.com/real-patch.patch")
+            # Source2 from changelog should NOT be in results
+            self.assertNotIn("2", source_tags)
+
+    def test_parse_handles_percent_escapes(self):
+        """Test that %% (escaped percent) doesn't stop parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+Version: 1.0
+# Some comment with %% escaped percent
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should still find Source0 even after %% line
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
+
+    def test_parse_with_global_directive(self):
+        """Test that %global directives don't stop parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+%global upstream_version 1.0.0
+%global python3_sitelib /usr/lib/python3/site-packages
+Name: testpkg
+Version: 1.0
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+Source1: https://example.com/patch.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should parse through %global directives
+            self.assertEqual(len(source_tags), 2)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
+            self.assertEqual(source_tags["1"], "https://example.com/patch.tar.gz")
+
+    def test_parse_with_define_directive(self):
+        """Test that %define directives don't stop parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+%define _fortify_level 3
+Name: testpkg
+
+Source0: https://example.com/file.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should parse through %define directives
+            self.assertEqual(source_tags["0"], "https://example.com/file.tar.gz")
+
+    def test_parse_with_conditionals(self):
+        """Test that %if/%endif conditionals don't stop parsing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+Name: testpkg
+%if 0
+This is removed in expanded spec
+%endif
+Source0: https://example.com/file.tar.gz
+
+%description
+Test package
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should parse through conditional blocks
+            self.assertEqual(source_tags["0"], "https://example.com/file.tar.gz")
+
+    def test_parse_real_world_structure(self):
+        """Test parsing a realistic spec file structure with changelog."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spec_content = """
+%global __python3 /usr/bin/python3
+%global python3_sitelib /usr/lib/python3/site-packages
+
+Name: testpkg
+Version: 1.0
+Release: 1
+
+Source0: https://example.com/testpkg-1.0.tar.gz
+Patch0: fix-build.patch
+
+BuildRequires: python3
+
+%description
+A test package
+
+%changelog
+* Mon Jan 01 2024 Test User <test@example.com> - 1.0-1
+- Initial package
+- Source0: Updated source URL (this should NOT be parsed)
+- Source1: Another fake source (should NOT be parsed)
+"""
+            spec_path = os.path.join(tmpdir, "test.spec")
+            with open(spec_path, "w", encoding="utf-8") as f:
+                f.write(spec_content)
+
+            source_tags = _parse_source_tags_literal(spec_path, tmpdir)
+            # Should only have Source0 from preamble, not from changelog
+            self.assertEqual(len(source_tags), 1)
+            self.assertEqual(source_tags["0"], "https://example.com/testpkg-1.0.tar.gz")
 
 
 if __name__ == "__main__":

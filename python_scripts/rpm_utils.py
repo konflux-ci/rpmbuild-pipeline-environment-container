@@ -9,6 +9,7 @@ This module provides common utilities for RPM-related operations including:
 
 import logging
 import os
+import re
 
 from norpm.macrofile import system_macro_registry
 from norpm.specfile import specfile_expand, ParserHooks
@@ -16,6 +17,20 @@ from norpm.overrides import override_macro_registry
 from norpm.exceptions import NorpmError
 
 from common_utils import run_command
+
+
+# Regex pattern for matching Source tags in spec files
+_SOURCE_TAG_PATTERN = re.compile(r'^Source(\d*)\s*:\s*(.+)$', re.IGNORECASE)
+
+# Section directives that mark the end of the spec preamble
+# Source tags should only appear before these directives
+_SPEC_SECTION_DIRECTIVES = frozenset({
+    '%description', '%prep', '%build', '%install', '%check', '%files',
+    '%changelog', '%package', '%pre', '%post', '%preun', '%postun',
+    '%pretrans', '%posttrans', '%trigger', '%triggerin', '%triggerun',
+    '%triggerprein', '%triggerpostun', '%verifyscript', '%clean',
+    '%autopatch', '%autosetup'
+})
 
 
 def create_macro_registry(macro_overrides=None, database=None, target_distribution=None):
@@ -97,22 +112,28 @@ class SourceHooks(ParserHooks):
             self.sources[source_num] = value
 
 
-def parse_spec_source_tags(specfile, srcdir="."):
-    """Parse Source tags from specfile using SourceHooks.
+def parse_spec_source_tags(specfile, srcdir=None, expand=True):
+    """Parse Source tags from specfile.
 
     :param specfile: Path to the specfile
     :type specfile: str
     :param srcdir: Source directory for resolving filenames
     :type srcdir: str
+    :param expand: If True, perform macro expansion; if False, parse literally
+    :type expand: bool
     :returns: Dictionary mapping source number to location (e.g., {"0": "https://...", "1": "patch.tar.gz"})
     :rtype: dict
     """
-    # Set up macro registry with _sourcedir macro
+    if srcdir is None:
+        srcdir = "."
+
+    if not expand:
+        return _parse_source_tags_literal(specfile, srcdir)
+
+    # Original behavior: expand macros using norpm
     registry = create_macro_registry(
         macro_overrides={"_sourcedir": srcdir},
     )
-
-    # Parse spec file with SourceHooks
     hooks = SourceHooks(srcdir)
     try:
         with open(specfile, "r", encoding="utf-8") as fd:
@@ -121,6 +142,55 @@ def parse_spec_source_tags(specfile, srcdir="."):
         logging.error("Failed to parse spec file %s: %s", specfile, err)
         raise
     return hooks.sources
+
+
+def _parse_source_tags_literal(specfile, srcdir):
+    """Parse Source tags from an already-expanded specfile without re-expansion.
+
+    This is a simple regex-based parser that extracts Source tags from
+    an already-expanded spec file. It does not perform macro expansion.
+
+    Note: This parser only reads the preamble section of the spec file
+    (before section directives like %description, %prep, %changelog). This
+    prevents false matches on changelog entries that mention Source tags.
+
+    :param specfile: Path to the specfile
+    :type specfile: str
+    :param srcdir: Source directory for resolving %{_sourcedir} references
+    :type srcdir: str
+    :returns: Dictionary mapping source number to location
+    :rtype: dict
+    """
+    sources = {}
+
+    try:
+        with open(specfile, "r", encoding="utf-8") as fd:
+            for line in fd:
+                line = line.strip()
+
+                if line.startswith('%'):
+                    parts = line.split()
+                    directive = parts[0] if parts else line
+                    if directive.lower() in _SPEC_SECTION_DIRECTIVES:
+                        logging.debug("Stopped parsing at section directive: %s", line[:50])
+                        break
+
+                match = _SOURCE_TAG_PATTERN.match(line)
+                if match:
+                    source_num = match.group(1) or "0"
+                    source_value = match.group(2).strip()
+
+                    # Handle %{_sourcedir} macro if present (common in expanded specs)
+                    source_value = source_value.replace("%{_sourcedir}", srcdir)
+                    source_value = source_value.replace("${_sourcedir}", srcdir)
+
+                    sources[source_num] = source_value
+                    logging.debug("Found Source%s: %s", source_num, source_value)
+    except IOError as err:
+        logging.error("Failed to read spec file %s: %s", specfile, err)
+        raise
+
+    return sources
 
 
 def get_rpm_license(rpm_path):
