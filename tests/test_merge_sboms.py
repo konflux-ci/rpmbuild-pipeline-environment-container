@@ -6,7 +6,6 @@ Tests merge_sboms.py.
 
 import json
 import os
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +14,7 @@ from merge_sboms import (
     _main as merge_sboms,
     CONFIG,
     init_config,
+    get_params,
     create_base_sbom,
     attach_sources,
     attach_buildroot_packages,
@@ -843,8 +843,8 @@ class TestMergeSboms(unittest.TestCase):
         rpm_dir = os.path.join(testdir, "sbom_sources")
         syft_sbom = os.path.join(testdir, "sbom_sources", 'syft_sbom.json')
         sbom_merged = os.path.join(testdir, 'sbom_merged.json')
-        sys.argv = ["this", "--rpm-dir", rpm_dir, '--syft-sbom', syft_sbom, '--sbom-merged', sbom_merged]
-        merge_sboms()
+        with patch('sys.argv', ["this", "--rpm-dir", rpm_dir, '--syft-sbom', syft_sbom, '--sbom-merged', sbom_merged]):
+            merge_sboms()
         with open(sbom_merged, "r", encoding="utf-8") as rfd:
             results = json.load(rfd)
         assert results == {
@@ -1233,6 +1233,79 @@ class TestAttachSyftSboms(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             attach_syft_sboms(sbom_root, None)
         self.assertIn("syft_sbom_dir parameter is required", str(cm.exception))
+
+
+class TestGetParams(unittest.TestCase):
+    """Unit tests for get_params function."""
+
+    def test_get_params_required_args(self):
+        """Test get_params with required arguments."""
+        with patch('sys.argv', [
+            'merge_sboms',
+            '--rpm-dir', '/tmp/rpms',
+            '--syft-sbom', '/tmp/syft.json',
+            '--sbom-merged', '/tmp/merged.json'
+        ]):
+            args = get_params()
+        self.assertEqual(args.rpm_dir, '/tmp/rpms')
+        self.assertEqual(args.syft_sbom, '/tmp/syft.json')
+        self.assertEqual(args.sbom_merged, '/tmp/merged.json')
+
+    def test_get_params_all_args(self):
+        """Test get_params with all optional arguments."""
+        with patch('sys.argv', [
+            'merge_sboms',
+            '--rpm-dir', '/tmp/rpms',
+            '--syft-sbom', '/tmp/syft.json',
+            '--sbom-merged', '/tmp/merged.json',
+            '--source-data', '/tmp/sources.json',
+            '--buildroot-arch-list', '/tmp/buildroots.json',
+            '--syft-sbom-dir', '/tmp/sboms',
+            '--config', '/tmp/config.json'
+        ]):
+            args = get_params()
+        self.assertEqual(args.rpm_dir, '/tmp/rpms')
+        self.assertEqual(args.syft_sbom, '/tmp/syft.json')
+        self.assertEqual(args.sbom_merged, '/tmp/merged.json')
+        self.assertEqual(args.source_data, '/tmp/sources.json')
+        self.assertEqual(args.buildroot_arch_list, '/tmp/buildroots.json')
+        self.assertEqual(args.syft_sbom_dir, '/tmp/sboms')
+        self.assertEqual(args.config, '/tmp/config.json')
+
+    def test_get_params_defaults(self):
+        """Test get_params default values for optional arguments."""
+        with patch('sys.argv', [
+            'merge_sboms',
+            '--rpm-dir', '/tmp/rpms',
+            '--syft-sbom', '/tmp/syft.json',
+            '--sbom-merged', '/tmp/merged.json'
+        ]):
+            args = get_params()
+        self.assertEqual(args.rpm_dir, '/tmp/rpms')
+        self.assertIsNone(args.source_data)
+        self.assertIsNone(args.buildroot_arch_list)
+        self.assertEqual(args.syft_sbom_dir, '.')
+        self.assertIsNone(args.config)
+
+    def test_get_params_rpm_dir_default(self):
+        """Test get_params with default rpm-dir."""
+        with patch('sys.argv', [
+            'merge_sboms',
+            '--syft-sbom', '/tmp/syft.json',
+            '--sbom-merged', '/tmp/merged.json'
+        ]):
+            args = get_params()
+        self.assertEqual(args.rpm_dir, '.')
+
+    def test_get_params_missing_required_fails(self):
+        """Test get_params fails when required arguments are missing."""
+        with patch('sys.argv', [
+            'merge_sboms',
+            '--rpm-dir', '/tmp/rpms'
+            # Missing --syft-sbom and --sbom-merged
+        ]):
+            with self.assertRaises(SystemExit):
+                get_params()
 
 
 class TestInitConfig(unittest.TestCase):

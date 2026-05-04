@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from common_utils import calc_checksum
 from validate_sbom import (
+    main,
     validate_source_checksums,
     validate_source_urls,
     validate_sbom,
@@ -556,6 +557,212 @@ class TestValidateSbom(unittest.TestCase):
             self.assertTrue(result)
         finally:
             os.unlink(temp_file)
+
+
+class TestMain(unittest.TestCase):
+    """
+    Unit tests for main() entry point function.
+    """
+
+    def test_main_success_exits_zero(self):
+        """Test main() exits with 0 on successful validation."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': []
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(sbom_data, f)
+            sbom_file = f.name
+
+        try:
+            with patch('sys.argv', ['validate_sbom', sbom_file, '--no-url-verify']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+        finally:
+            os.unlink(sbom_file)
+
+    def test_main_failure_exits_one(self):
+        """Test main() exits with 1 on validation failure."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': [
+                {
+                    'SPDXID': 'SPDXRef-Source0',
+                    'name': 'test-source',
+                    'packageFileName': 'test.tar.gz',
+                    'downloadLocation': 'NOASSERTION',
+                    'checksums': [
+                        {
+                            'algorithm': 'SHA256',
+                            'checksumValue': 'wrongchecksum'
+                        }
+                    ]
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test file with different content
+            test_file = os.path.join(tmpdir, 'test.tar.gz')
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            sbom_file = os.path.join(tmpdir, 'sbom.json')
+            with open(sbom_file, 'w', encoding='utf-8') as f:
+                json.dump(sbom_data, f)
+
+            with patch('sys.argv', ['validate_sbom', sbom_file,
+                                    '--source-dir', tmpdir, '--no-url-verify']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch('validate_sbom.is_url_accessible', return_value=True)
+    def test_main_with_url_verify(self, mock_is_accessible):
+        """Test main() with URL verification enabled (default)."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': [
+                {
+                    'SPDXID': 'SPDXRef-Source0',
+                    'name': 'test-source',
+                    'downloadLocation': 'https://example.com/test.tar.gz'
+                }
+            ]
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(sbom_data, f)
+            sbom_file = f.name
+
+        try:
+            with patch('sys.argv', ['validate_sbom', sbom_file]):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+            # Verify URL check was called
+            mock_is_accessible.assert_called()
+        finally:
+            os.unlink(sbom_file)
+
+    def test_main_with_source_dir(self):
+        """Test main() with --source-dir for checksum verification."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test file
+            test_file = os.path.join(tmpdir, 'test.tar.gz')
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("test content")
+
+            checksum = calc_checksum(test_file, 'sha256')
+
+            sbom_data = {
+                'spdxVersion': 'SPDX-2.3',
+                'name': 'test-sbom',
+                'packages': [
+                    {
+                        'SPDXID': 'SPDXRef-Source0',
+                        'name': 'test-source',
+                        'packageFileName': 'test.tar.gz',
+                        'downloadLocation': 'NOASSERTION',
+                        'checksums': [
+                            {
+                                'algorithm': 'SHA256',
+                                'checksumValue': checksum
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            sbom_file = os.path.join(tmpdir, 'sbom.json')
+            with open(sbom_file, 'w', encoding='utf-8') as f:
+                json.dump(sbom_data, f)
+
+            with patch('sys.argv', ['validate_sbom', sbom_file,
+                                    '--source-dir', tmpdir, '--no-url-verify']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+
+    def test_main_no_checksum_verify_flag(self):
+        """Test main() with --no-checksum-verify flag."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': [
+                {
+                    'SPDXID': 'SPDXRef-Source0',
+                    'name': 'test-source',
+                    'packageFileName': 'test.tar.gz',
+                    'downloadLocation': 'NOASSERTION',
+                    'checksums': [
+                        {
+                            'algorithm': 'SHA256',
+                            'checksumValue': 'anychecksum'
+                        }
+                    ]
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sbom_file = os.path.join(tmpdir, 'sbom.json')
+            with open(sbom_file, 'w', encoding='utf-8') as f:
+                json.dump(sbom_data, f)
+
+            # Should pass even without source-dir when checksums disabled
+            with patch('sys.argv', ['validate_sbom', sbom_file,
+                                    '--no-url-verify', '--no-checksum-verify']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+
+    def test_main_debug_flag(self):
+        """Test main() with --debug flag enables debug logging."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': []
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(sbom_data, f)
+            sbom_file = f.name
+
+        try:
+            with patch('sys.argv', ['validate_sbom', sbom_file,
+                                    '--no-url-verify', '--debug']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+        finally:
+            os.unlink(sbom_file)
+
+    def test_main_checksum_verify_wo_source_dir(self):
+        """Test main() warns when checksum verify enabled but no source-dir."""
+        sbom_data = {
+            'spdxVersion': 'SPDX-2.3',
+            'name': 'test-sbom',
+            'packages': []
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(sbom_data, f)
+            sbom_file = f.name
+
+        try:
+            # No --no-checksum-verify and no --source-dir should trigger warning
+            with patch('sys.argv', ['validate_sbom', sbom_file, '--no-url-verify']):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+            self.assertEqual(cm.exception.code, 0)
+        finally:
+            os.unlink(sbom_file)
 
 
 if __name__ == "__main__":

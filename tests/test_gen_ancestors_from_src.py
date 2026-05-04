@@ -431,6 +431,34 @@ class TestListSpecSources(unittest.TestCase):
         self.assertEqual(len(sources), 1)
         self.assertEqual(sources[0]["filename"], "pkg-1.0.tar.gz")
 
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_already_expanded_flag(self, _mock_checksum, mock_parse):
+        """Test that already_expanded=True passes expand=False to parse_spec_source_tags."""
+        mock_parse.return_value = {"0": "https://example.com/pkg-1.0.tar.gz"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "pkg-1.0.tar.gz"), 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
+            list_spec_sources("fake.spec", tmpdir, already_expanded=True)
+
+        # Verify parse_spec_source_tags was called with expand=False
+        mock_parse.assert_called_once_with("fake.spec", tmpdir, expand=False)
+
+    @patch("gen_ancestors_from_src.parse_spec_source_tags")
+    @patch("gen_ancestors_from_src.calc_checksum", return_value="fakechecksum")
+    def test_default_behavior_enables_expansion(self, _mock_checksum, mock_parse):
+        """Test that default behavior passes expand=True to parse_spec_source_tags."""
+        mock_parse.return_value = {"0": "https://example.com/pkg-1.0.tar.gz"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "pkg-1.0.tar.gz"), 'w', encoding="utf-8") as f:
+                f.write("dummy")
+
+            list_spec_sources("fake.spec", tmpdir)
+
+        # Verify parse_spec_source_tags was called with expand=True (default)
+        mock_parse.assert_called_once_with("fake.spec", tmpdir, expand=True)
+
 
 class TestListSources(unittest.TestCase):
     """
@@ -757,6 +785,49 @@ class TestMain(unittest.TestCase):
             with open(output_file, 'r', encoding='utf-8') as f:
                 result = json.load(f)
             self.assertEqual(result["sources"][0]["name"], "new")
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_already_expanded_flag_vs_list_sources(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test --already-expanded CLI flag is passed to list_sources."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--dist-git-config-dir", "/tmp",
+                         "--already-expanded"]
+            with patch("sys.stdout"):
+                main()
+
+            # Verify list_sources was called with already_expanded=True
+            call_args = mock_list_sources.call_args
+            _, kwargs = call_args
+            self.assertTrue(kwargs["already_expanded"])
+
+    @patch("gen_ancestors_from_src.list_sources")
+    @patch("gen_ancestors_from_src.search_specfile", return_value="/tmp/fake.spec")
+    @patch("gen_ancestors_from_src.load_distgit_config")
+    def test_already_expanded_default_false(self, mock_load_config, _mock_search, mock_list_sources):
+        """Test already_expanded defaults to False when flag not provided."""
+        mock_url = urlparse("https://example.com/ns/myrepo.git")
+        mock_load_config.return_value = (mock_url, {})
+        mock_list_sources.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sys.argv = ["gen_ancestors_from_src",
+                         "-s", tmpdir,
+                         "--dist-git-config-dir", "/tmp"]
+            with patch("sys.stdout"):
+                main()
+
+            # Verify list_sources was called with already_expanded=False (default)
+            call_args = mock_list_sources.call_args
+            _, kwargs = call_args
+            self.assertFalse(kwargs["already_expanded"])
 
 
 if __name__ == "__main__":

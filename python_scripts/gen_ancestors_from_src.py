@@ -201,20 +201,22 @@ def parse_dist_git_sources(sources_file, repo_name, distgit_config):
     return sources_map
 
 
-def list_spec_sources(specfile, srcdir="."):
+def list_spec_sources(specfile, srcdir=".", already_expanded=False):
     """List sources from specfile using python-norpm.
 
     :param specfile: Path to the specfile
     :type specfile: str
     :param srcdir: Source directory containing the archives
     :type srcdir: str
+    :param already_expanded: If True, skip macro expansion (spec is already expanded)
+    :type already_expanded: bool
     :returns: List of source dictionaries
     :rtype: list
     """
     sources = []
 
     # Parse spec file to get Source tags
-    source_tags = parse_spec_source_tags(specfile, srcdir)
+    source_tags = parse_spec_source_tags(specfile, srcdir, expand=not already_expanded)
 
     # Process captured sources
     for source_num, loc in source_tags.items():
@@ -293,7 +295,7 @@ def get_repo_name(remote_url):
     return repo_name
 
 
-def list_sources(specfile, srcdir, repo_name, distgit_config):
+def list_sources(specfile, srcdir, repo_name, distgit_config, already_expanded=False):
     """List and combine sources (SourceN from specfile) with midstreams (dist-git sources file)
 
     :param specfile: Path to the specfile
@@ -304,11 +306,13 @@ def list_sources(specfile, srcdir, repo_name, distgit_config):
     :type repo_name: str
     :param distgit_config: Dist-git instance configuration
     :type distgit_config: dict
+    :param already_expanded: If True, skip macro expansion in spec parsing
+    :type already_expanded: bool
     :returns: List of source dictionaries with midstream property
     :rtype: list
     """
     # Get sources from specfile
-    sources = list_spec_sources(specfile, srcdir)
+    sources = list_spec_sources(specfile, srcdir, already_expanded=already_expanded)
 
     # Get sources file path from dist-git config
     sources_file_template = distgit_config.get("sources_file", "sources")
@@ -365,6 +369,13 @@ def main():
              "URL from dist-git-client configuration.  Also avoids the need "
              "for .git/config when it has been removed.",
     )
+    parser.add_argument(
+        "--already-expanded",
+        action="store_true",
+        help="Treat specfile as already macro-expanded; skip re-expansion. "
+             "Use when passing expanded-spec.txt from Mock to avoid re-expanding "
+             "escaped macros (e.g., %%%%escaped_macro in changelogs).",
+    )
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="Debug mode")
     options = parser.parse_args()
 
@@ -397,7 +408,8 @@ def main():
         specfile = search_specfile(src_dir)
         logging.info("Specfile found: %s", specfile)
 
-    sources = list_sources(specfile, src_dir, repo_name, distgit_config)
+    sources = list_sources(specfile, src_dir, repo_name, distgit_config,
+                          already_expanded=options.already_expanded)
     result = {"sources": sources}
     if options.output_file:
         if os.path.exists(options.output_file):
