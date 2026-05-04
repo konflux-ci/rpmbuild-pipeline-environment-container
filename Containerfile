@@ -1,4 +1,4 @@
-FROM registry.fedoraproject.org/fedora:43@sha256:bf42f7ebc38f2c53dc5f4c0fa1457e47aff35cdf1cffe1bcc8383d1a372f2857
+FROM registry.fedoraproject.org/fedora:44@sha256:069c793cd52e56a2f1a541ce41334393fc95d351992483a0e5e996fa26c5c8ad
 
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
