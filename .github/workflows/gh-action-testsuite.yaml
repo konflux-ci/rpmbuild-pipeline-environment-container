@@ -35,7 +35,7 @@ jobs:
         run: dnf install -y python3-norpm python3-pip python3-specfile koji patch git rpmlint
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
 
       - name: Install test dependencies
         run: pip install -r test_requirements.txt
