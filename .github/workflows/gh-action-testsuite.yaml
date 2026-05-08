@@ -13,7 +13,7 @@ jobs:
     outputs:
       fedora_image_link: ${{ steps.set-image-link.outputs.image_link }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: set-image-link
         run: |
           IMAGE_LINK=$(cat Containerfile | grep FROM | cut -d ' ' --fields=2)
