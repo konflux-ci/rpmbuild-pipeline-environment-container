@@ -86,15 +86,29 @@ class TestSearchSpecfile(unittest.TestCase):
             result = search_specfile(tmpdir)
             self.assertEqual(result, specfile_path)
 
-    def test_specfile_in_subdirectory(self):
-        """Test finding a specfile in a subdirectory."""
+    def test_specfile_in_subdirectory_ignored(self):
+        """Test that specfiles in subdirectories are not found."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a subdirectory with a specfile
             subdir = os.path.join(tmpdir, "subdir")
             os.makedirs(subdir)
-            specfile_path = os.path.join(subdir, "package.spec")
-            with open(specfile_path, "w", encoding="utf-8") as f:
+            with open(os.path.join(subdir, "package.spec"), "w", encoding="utf-8") as f:
                 f.write("Name: package\n")
+
+            with self.assertRaises(FileNotFoundError):
+                search_specfile(tmpdir)
+
+    def test_specfile_with_template_in_subdirectory(self):
+        """Test that a spec in a subdirectory doesn't conflict with top-level spec."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            specfile_path = os.path.join(tmpdir, "kubernetes.spec")
+            with open(specfile_path, "w", encoding="utf-8") as f:
+                f.write("Name: kubernetes\n")
+            # Template spec in subdirectory should be ignored
+            template_dir = os.path.join(tmpdir, "template")
+            os.makedirs(template_dir)
+            with open(os.path.join(template_dir, "kubernetes-template.spec"), "w", encoding="utf-8") as f:
+                f.write("Name: kubernetes-template\n")
 
             result = search_specfile(tmpdir)
             self.assertEqual(result, specfile_path)

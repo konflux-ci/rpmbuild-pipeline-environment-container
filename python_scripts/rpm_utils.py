@@ -72,11 +72,15 @@ def search_specfile(src_dir):
     :raises FileNotFoundError: If no specfile found
     :raises OSError: If multiple specfiles found
     """
-    specfiles = []
-    for root, _, files in os.walk(src_dir):
-        for file in files:
-            if file.endswith(".spec"):
-                specfiles.append(os.path.join(root, file))
+    try:
+        entries = os.scandir(src_dir)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"No specfile found in {src_dir}") from exc
+    specfiles = [
+        entry.path
+        for entry in entries
+        if entry.is_file() and entry.name.endswith(".spec")
+    ]
     if len(specfiles) == 0:
         raise FileNotFoundError(f"No specfile found in {src_dir}")
     if len(specfiles) > 1:
