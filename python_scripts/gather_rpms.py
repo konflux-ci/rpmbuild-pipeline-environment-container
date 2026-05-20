@@ -168,10 +168,8 @@ def handle_archdir(arch, pipeline_id):
 
     # buildroots
     if all_rpms:
+        os.makedirs(os.path.join(STAGING_DIR, arch), exist_ok=True)
         for filename in arch_logs:
-            log_dir = os.path.join(STAGING_DIR, arch)
-            if not os.path.exists(log_dir):
-                os.mkdir(log_dir)
             logs.append((arch, filename))
             symlink(filename, arch, prepend_arch=True)
         lockfile_path = os.path.join(arch, 'results', 'buildroot_lock.json')
