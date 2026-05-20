@@ -458,6 +458,50 @@ class TestHandleArchdirIntegration(unittest.TestCase):
         # Verify broot_arch_rpms was not populated
         self.assertNotIn("aarch64", gather_rpms.broot_arch_rpms)
 
+    @patch('gather_rpms.pick_ancestors')
+    @patch('gather_rpms.symlink')
+    @patch('gather_rpms.pick_sbom')
+    @patch('gather_rpms.prepare_koji_broot')
+    def test_handle_archdir_logs_only_no_rpms(
+            self, mock_prepare_koji_broot, _mock_pick_sbom,
+            mock_symlink, _mock_pick_ancestors):
+        """Test handle_archdir skips logs when arch has no RPMs.
+
+        This happens with noarch packages built on multiple architectures:
+        the first arch claims all noarch RPMs, leaving subsequent arch
+        directories with only log files and no RPMs.
+        """
+        pipeline_id = "test-pipeline-789"
+
+        # Simulate the first arch claiming the noarch RPMs
+        first_arch = "aarch64"
+        os.makedirs(os.path.join(self.temp_dir, first_arch), exist_ok=True)
+        for f in ["foo-1.0-1.fc42.noarch.rpm", "foo-1.0-1.fc42.src.rpm", "build.log"]:
+            with open(os.path.join(self.temp_dir, first_arch, f), 'w', encoding='utf-8'):
+                pass
+        handle_archdir(first_arch, pipeline_id)
+        self.assertEqual(len(gather_rpms.logs), 1)
+        mock_symlink.reset_mock()
+
+        # Second arch has the same noarch RPMs (already claimed) plus logs
+        second_arch = "x86_64"
+        os.makedirs(os.path.join(self.temp_dir, second_arch), exist_ok=True)
+        for f in ["foo-1.0-1.fc42.noarch.rpm", "foo-1.0-1.fc42.src.rpm", "build.log"]:
+            with open(os.path.join(self.temp_dir, second_arch, f), 'w', encoding='utf-8'):
+                pass
+        handle_archdir(second_arch, pipeline_id)
+
+        # x86_64 should not have a buildroot since all its RPMs were duplicates
+        self.assertNotIn("x86_64", gather_rpms.broot_arch_rpms)
+        mock_prepare_koji_broot.assert_called_once()
+
+        # Logs from x86_64 should NOT be collected since no RPMs were new
+        self.assertEqual(len(gather_rpms.logs), 1)
+        self.assertEqual(gather_rpms.logs[0], ("aarch64", "build.log"))
+
+        # No symlinks should have been created for x86_64
+        mock_symlink.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
