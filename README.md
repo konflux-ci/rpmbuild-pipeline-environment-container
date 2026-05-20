@@ -10,4 +10,10 @@ and includes a few scripts and patches.
 Use of this image outside the RPM Build pipeline is not supported.  For
 documentation, please refer to the [pipeline][].
 
+# Building
+``podman build -F Containerfile``
+
+# Testing
+``./run_tests.sh``
+
 [pipeline]: https://github.com/konflux-ci/rpmbuild-pipeline
