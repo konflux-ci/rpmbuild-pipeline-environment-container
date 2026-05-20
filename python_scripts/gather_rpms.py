@@ -138,6 +138,7 @@ def handle_archdir(arch, pipeline_id):
     logging.info("Handling archdir %s", arch)
     logging.debug("Contents of archdir %s are %s", arch, os.listdir(arch))
     all_rpms = []
+    arch_logs = []
     for filename in os.listdir(arch):
         logging.debug("Handling filename %s", filename)
         if filename.endswith('.noarch.rpm'):
@@ -161,16 +162,18 @@ def handle_archdir(arch, pipeline_id):
             symlink(filename, arch)
             pick_sbom(rpm_filename=filename, arch=arch)
         elif filename.endswith('.log'):
-            log_dir = os.path.join(STAGING_DIR, arch)
-            if not os.path.exists(log_dir):
-                os.mkdir(log_dir)
-            logs.append((arch, filename))
-            symlink(filename, arch, prepend_arch=True)
+            arch_logs.append(filename)
         else:
             continue
 
     # buildroots
     if all_rpms:
+        for filename in arch_logs:
+            log_dir = os.path.join(STAGING_DIR, arch)
+            if not os.path.exists(log_dir):
+                os.mkdir(log_dir)
+            logs.append((arch, filename))
+            symlink(filename, arch, prepend_arch=True)
         lockfile_path = os.path.join(arch, 'results', 'buildroot_lock.json')
         broot_arch_rpms[arch] = {
             "filelist": all_rpms,
