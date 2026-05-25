@@ -651,7 +651,9 @@ class TestAttachBuildrootPackages(unittest.TestCase):
 
             # Check purl includes epoch
             purl = systemd_pkg['externalRefs'][0]['referenceLocator']
-            self.assertIn('2:252-13.el9', purl)
+            self.assertNotIn('2:252-13.el9', purl)
+            self.assertIn('252-13.el9', purl)
+            self.assertIn('epoch=2', purl)
         finally:
             os.unlink(lockfile_path)
             os.unlink(broot_arch_list_file)
