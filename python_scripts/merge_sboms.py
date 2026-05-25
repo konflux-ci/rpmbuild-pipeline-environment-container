@@ -196,8 +196,8 @@ def create_base_sbom(rpm_dir):
         spdx_license = to_spdx_license(rpminfo['license'])
 
         version_info = f"{rpminfo['version']}-{rpminfo['release']}"
-        if rpminfo.get("epoch"):
-            version_info = f"{rpminfo['version']:verion_info}"
+        if rpminfo.get("epoch") and str(rpminfo['epoch'] != "0"):
+            version_info = f"{rpminfo['version']}:{version_info}"
 
         sbom['packages'].append({
             "SPDXID": spdxid,
@@ -573,7 +573,7 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
 
             # Build version string (version-release with optional epoch prefix)
             version_info = f"{rpm['version']}-{rpm['release']}"
-            if rpm.get('epoch'):
+            if rpm.get("epoch") and str(rpm["epoch"] != "0"):
                 version_info = f"{rpm['epoch']}:{version_info}"
 
             # Create buildroot package dictionary
