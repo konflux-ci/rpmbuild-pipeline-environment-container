@@ -195,10 +195,14 @@ def create_base_sbom(rpm_dir):
         # Get license and convert to SPDX format
         spdx_license = to_spdx_license(rpminfo['license'])
 
+        version_info = f"{rpminfo['version']}-{rpminfo['release']}"
+        if rpminfo.get("epoch"):
+            version_info = f"{rpminfo['version']:verion_info}"
+
         sbom['packages'].append({
             "SPDXID": spdxid,
             "name": rpminfo['name'],
-            "versionInfo": f"{rpminfo['version']}-{rpminfo['release']}",
+            "versionInfo": version_info,
             "supplier": CONFIG["supplier"],
             "downloadLocation": "NOASSERTION",
             "packageFileName": rpm,
@@ -568,16 +572,15 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
             spdx_id = f"SPDXRef-Buildroot-Package-{rpm['name']}-{target_arch}".replace('_', '-')
 
             # Build version string (version-release with optional epoch prefix)
-            version = f"{rpm['version']}-{rpm['release']}"
-            epoch_version = version
+            version_info = f"{rpm['version']}-{rpm['release']}"
             if rpm.get('epoch'):
-                epoch_version = f"{rpm['epoch']}:{version}"
+                version_info = f"{rpm['epoch']}:{version_info}"
 
             # Create buildroot package dictionary
             pkg_dict = {
                 "SPDXID": spdx_id,
                 "name": rpm["name"],
-                "versionInfo": epoch_version,
+                "versionInfo": version_info,
                 "downloadLocation": rpm.get("url", "NOASSERTION"),
                 "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
