@@ -105,7 +105,7 @@ class TestGetRpmPurl(unittest.TestCase):
             arch="aarch64",
             epoch="2"
         )
-        self.assertEqual(purl, "pkg:rpm/fedora/systemd@2:252-13.el9?arch=aarch64")
+        self.assertEqual(purl, "pkg:rpm/fedora/systemd@252-13.el9?arch=aarch64&epoch=2")
 
     def test_rpm_purl_noarch(self):
         """Test RPM purl with noarch architecture."""

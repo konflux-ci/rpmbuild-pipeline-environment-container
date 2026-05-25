@@ -569,14 +569,15 @@ def attach_buildroot_packages(sbom_root, broot_arch_list_file, srpm_name):  # py
 
             # Build version string (version-release with optional epoch prefix)
             version = f"{rpm['version']}-{rpm['release']}"
+            epoch_version = version
             if rpm.get('epoch'):
-                version = f"{rpm['epoch']}:{version}"
+                epoch_version = f"{rpm['epoch']}:{version}"
 
             # Create buildroot package dictionary
             pkg_dict = {
                 "SPDXID": spdx_id,
                 "name": rpm["name"],
-                "versionInfo": version,
+                "versionInfo": epoch_version,
                 "downloadLocation": rpm.get("url", "NOASSERTION"),
                 "licenseDeclared": to_spdx_license(rpm.get("license")),
                 "filesAnalyzed": False,
