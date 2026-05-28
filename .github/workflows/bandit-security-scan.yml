@@ -1,0 +1,47 @@
+---
+name: Bandit Security Scan
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  bandit-scan:
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install Bandit
+        run: pip install bandit[sarif]
+
+      - name: Run Bandit security scan
+        run: |
+          bandit -r . -f sarif -o bandit-report.sarif --exit-zero
+
+      - name: Upload Bandit SARIF artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Bandit Security Report
+          path: bandit-report.sarif
+        if: ${{ always() }}
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: bandit-report.sarif
+        if: ${{ always() }}
+
+      - name: Run Bandit (enforce medium/high severity threshold)
+        run: bandit -r . -ll
