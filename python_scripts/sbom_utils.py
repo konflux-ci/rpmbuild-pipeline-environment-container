@@ -46,7 +46,7 @@ def get_rpm_purl(name, version, release, arch, *, epoch=None, namespace="fedora"
     version_str = f"{version}-{release}"
 
     purl = f"pkg:rpm/{namespace}/{name}@{version_str}?arch={arch}"
-    if epoch:
+    if epoch and str(epoch) != "0":
         purl += f"&epoch={epoch}"
     return purl
 
