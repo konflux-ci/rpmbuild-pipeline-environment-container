@@ -25,7 +25,8 @@ BROOT_ARCH_RPMS_JSON = "buildroot_rpms.json"
 # buildroot_tag: koji build tag
 # event_id: koji event id of build repo creation
 # {"repo_id": <repo_id>, "buildroot_tag": <buildroot_tag>, "event_id": <event_id>}
-KOJI_BUILDROOT_METADATA_FILE = "/tmp/konflux-extra-koji-metadata.json"
+# Note: /tmp path is provided by pipeline environment, not user-controlled
+KOJI_BUILDROOT_METADATA_FILE = "/tmp/konflux-extra-koji-metadata.json"  # nosec B108
 
 # TODO - pipeline_url
 
