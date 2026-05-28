@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404 - subprocess needed for rpmdiff execution
 import sys
 
 
@@ -33,8 +33,9 @@ def _main():
         for fpath in fpaths[1:]:
             print(f'Comparing {baseline} vs. {fpath}', end='\t')
             sys.stdout.flush()
-            results = subprocess.run(
-                ["rpmdiff", "-i", "S", "5", "T", "N", "--", baseline, fpath],
+            # rpmdiff is a trusted tool, file paths are from controlled results dir
+            results = subprocess.run(  # nosec B603
+                ["/usr/bin/rpmdiff", "-i", "S", "5", "T", "N", "--", baseline, fpath],
                 capture_output=True,
                 check=False
             )

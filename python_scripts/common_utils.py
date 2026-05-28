@@ -6,7 +6,7 @@ and error message sanitization.
 
 import hashlib
 import logging
-import subprocess
+import subprocess  # nosec B404 - subprocess needed for secure command execution
 import urllib.request
 
 
@@ -28,8 +28,8 @@ def setup_logging(debug=False):
 def run_command(cmd, capture_output=True, check=True, cwd=None, timeout=None):
     """Execute a command and return the result.
 
-    :param cmd: Command to execute (string or list)
-    :type cmd: str or list
+    :param cmd: Command to execute (must be a list, not a string)
+    :type cmd: list
     :param capture_output: Whether to capture stdout/stderr
     :type capture_output: bool
     :param check: Whether to raise exception on non-zero exit code
@@ -41,10 +41,13 @@ def run_command(cmd, capture_output=True, check=True, cwd=None, timeout=None):
     :returns: Completed process object
     :rtype: subprocess.CompletedProcess
     """
+    if isinstance(cmd, str):
+        raise ValueError("Command must be a list, not a string. Passing shell commands as "
+                         "strings is a security risk.")
     logging.debug("Running command: %s", cmd)
     result = subprocess.run(
         cmd,
-        shell=isinstance(cmd, str),
+        shell=False,  # nosec B603 - Command is list-based, args are validated by caller
         capture_output=capture_output,
         text=True,
         check=check,

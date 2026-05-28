@@ -268,20 +268,13 @@ class TestRunCommand(unittest.TestCase):
         call_args = mock_run.call_args
         self.assertEqual(call_args[1]["cwd"], "/tmp")
 
-    @patch("subprocess.run")
-    def test_shell_command(self, mock_run):
-        """Test running shell command (string)."""
-        mock_result = MagicMock()
-        mock_result.stdout = ""
-        mock_result.stderr = ""
-        mock_result.returncode = 0
-        mock_run.return_value = mock_result
+    def test_shell_command(self):
+        """Test that shell command (string) is rejected for security."""
+        with self.assertRaises(ValueError) as context:
+            run_command("echo test")
 
-        run_command("echo test")
-
-        call_args = mock_run.call_args
-        self.assertEqual(call_args[0][0], "echo test")
-        self.assertTrue(call_args[1]["shell"])
+        self.assertIn("Command must be a list", str(context.exception))
+        self.assertIn("security risk", str(context.exception))
 
     @patch("subprocess.run")
     def test_command_without_capture(self, mock_run):
