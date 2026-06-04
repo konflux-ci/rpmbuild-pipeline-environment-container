@@ -180,7 +180,8 @@ def _main():
         print(f"Avoid ExcludeArch: {arches["excludearch"]}")
         build_architectures -= arches["excludearch"]
     if arches['buildarch'] == set(['noarch']):
-        selected_architectures = [random.choice(list(build_architectures))]
+        # Use random.choice for non-cryptographic random selection of build architecture
+        selected_architectures = [random.choice(list(build_architectures))]  # nosec B311
         print(f"We've randomly selected {selected_architectures[0]} from "
               f"{build_architectures}")
     else:
