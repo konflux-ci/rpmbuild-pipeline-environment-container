@@ -60,6 +60,7 @@ def apply_platform_overrides(platform_labels, architecture_decision):
         "arm64": ["aarch64"],
         "s390x": ["s390x", "s390"],
         "ppc64le": ["ppc64le"],
+        "riscv64": ["riscv64"],
     }
 
     for platform_string in platform_labels:
@@ -168,6 +169,7 @@ def _main():
         "deps-x86_64": "linux/amd64",
         "deps-i686": "linux/amd64",
         "deps-aarch64": "linux/arm64",
+        "deps-riscv64": "linux/riscv64",
         "deps-s390": "linux/s390x",
         "deps-s390x": "linux/s390x",
         "deps-ppc64le": "linux/ppc64le",
@@ -175,6 +177,7 @@ def _main():
         "build-x86_64": "linux/amd64",
         "build-i686": "linux/amd64",
         "build-aarch64": "linux/arm64",
+        "build-riscv64": "linux/riscv64",
         "build-s390": "linux/s390x",
         "build-s390x": "linux/s390x",
         "build-ppc64le": "linux/ppc64le",
