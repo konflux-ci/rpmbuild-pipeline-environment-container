@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 import argparse
 import os
-import subprocess  # nosec B404 - subprocess needed for rpmdiff execution
+# subprocess needed for rpmdiff execution
+import subprocess  # nosec B404
 import sys
 
 
