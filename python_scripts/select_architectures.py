@@ -179,6 +179,7 @@ def _main():
         "build-s390x": "linux/s390x",
         "build-ppc64le": "linux/ppc64le",
         "build-noarch": "linux/amd64",
+        "noarch-platform-arch": None,
     }
 
     # Apply Platform Overrides
@@ -247,6 +248,7 @@ def _main():
             print("Warning: no known architecture available for noarch "
                   f"platform selection (real_arches={real_arches}), "
                   "build-noarch using default")
+            architecture_decision["noarch-platform-arch"] = "x86_64"
         else:
             chosen = next(
                 (p for p in NOARCH_PLATFORM_PRIORITY if p in known_arches),
@@ -255,6 +257,7 @@ def _main():
                 architecture_decision[f"build-{chosen}"]
             architecture_decision["deps-noarch"] = \
                 architecture_decision[f"deps-{chosen}"]
+            architecture_decision["noarch-platform-arch"] = chosen
             if chosen not in NOARCH_PLATFORM_PRIORITY:
                 print(f"Warning: no architecture in "
                       f"NOARCH_PLATFORM_PRIORITY matched available "
@@ -267,6 +270,8 @@ def _main():
 
     # skip disabled architectures
     for key in architecture_decision:
+        if not (key.startswith("build-") or key.startswith("deps-")):
+            continue
         if any(key.endswith("-" + a) for a in selected_architectures):
             continue
         print(f"disabling {key} because it is not a selected architecture")
