@@ -206,8 +206,8 @@ def _main():
     # BuildArch or ExclusiveArch (and is not in ExcludeArch), add it to the
     # build set so the noarch task is enabled.
     if 'noarch' not in arches['excludearch'] and \
-            ('noarch' in arches.get('buildarch', set()) or
-             'noarch' in arches.get('exclusivearch', set())):
+            ('noarch' in arches['buildarch'] or
+             'noarch' in arches['exclusivearch']):
         build_architectures.add('noarch')
 
     if not build_architectures:
@@ -248,35 +248,26 @@ def _main():
                   f"platform selection (real_arches={real_arches}), "
                   "build-noarch using default")
         else:
-            for preferred in NOARCH_PLATFORM_PRIORITY:
-                if preferred in known_arches:
-                    architecture_decision["build-noarch"] = \
-                        architecture_decision[f"build-{preferred}"]
-                    architecture_decision["deps-noarch"] = \
-                        architecture_decision[f"deps-{preferred}"]
-                    print(f"noarch platform selected from {preferred}: "
-                          f"{architecture_decision['build-noarch']}")
-                    break
-            else:
-                fallback = sorted(known_arches)[0]
-                architecture_decision["build-noarch"] = \
-                    architecture_decision[f"build-{fallback}"]
-                architecture_decision["deps-noarch"] = \
-                    architecture_decision[f"deps-{fallback}"]
+            chosen = next(
+                (p for p in NOARCH_PLATFORM_PRIORITY if p in known_arches),
+                sorted(known_arches)[0])
+            architecture_decision["build-noarch"] = \
+                architecture_decision[f"build-{chosen}"]
+            architecture_decision["deps-noarch"] = \
+                architecture_decision[f"deps-{chosen}"]
+            if chosen not in NOARCH_PLATFORM_PRIORITY:
                 print(f"Warning: no architecture in "
                       f"NOARCH_PLATFORM_PRIORITY matched available "
                       f"arches {known_arches}, build-noarch falling "
-                      f"back to {fallback}: "
+                      f"back to {chosen}: "
+                      f"{architecture_decision['build-noarch']}")
+            else:
+                print(f"noarch platform selected from {chosen}: "
                       f"{architecture_decision['build-noarch']}")
 
     # skip disabled architectures
     for key in architecture_decision:
-        found = False
-        for arch_ok in selected_architectures:
-            if key.endswith("-" + arch_ok):
-                found = True
-                break
-        if found:
+        if any(key.endswith("-" + a) for a in selected_architectures):
             continue
         print(f"disabling {key} because it is not a selected architecture")
         architecture_decision[key] = "localhost"

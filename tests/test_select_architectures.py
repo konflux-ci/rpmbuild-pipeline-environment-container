@@ -20,6 +20,27 @@ from select_architectures import get_arch_specific_tags
 SELECTED_ARCHES = ["x86_64", "i686", "ppc64le", "s390", "s390x", "aarch64"]
 
 
+def _all_localhost(**overrides):
+    base = {
+        "deps-x86_64": "localhost",
+        "deps-i686": "localhost",
+        "deps-aarch64": "localhost",
+        "deps-s390": "localhost",
+        "deps-s390x": "localhost",
+        "deps-ppc64le": "localhost",
+        "deps-noarch": "localhost",
+        "build-x86_64": "localhost",
+        "build-i686": "localhost",
+        "build-aarch64": "localhost",
+        "build-s390": "localhost",
+        "build-s390x": "localhost",
+        "build-ppc64le": "localhost",
+        "build-noarch": "localhost",
+    }
+    base.update(overrides)
+    return base
+
+
 class TestSelectArchitectures(TestCase):
     """
     Unit tests for python_scripts/select_architectures.py.
@@ -65,22 +86,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("gdb-exploitable.spec",
                                                    ["--hermetic"])
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
-            "build-x86_64": "localhost",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_basic_multiarch_hermetic(self):
         """
@@ -90,22 +99,16 @@ class TestSelectArchitectures(TestCase):
                                                    ["--hermetic"])
 
         # This should build on x86_64, aarch64 and ppc64le
-        assert results == {
+        assert results == _all_localhost(**{
             "deps-x86_64": "linux/amd64",
             "deps-i686": "linux/amd64",
             "deps-aarch64": "linux/arm64",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
-            "deps-noarch": "localhost",
             "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_basic_multiarch_not_hermetic(self):
         """
@@ -113,22 +116,12 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dpdk.spec")
         # This should build on x86_64, aarch64 and ppc64le
-        assert results == {
-            "deps-i686": "localhost",
-            "deps-x86_64": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
+        assert results == _all_localhost(**{
             "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_exclude_exlusive_arch(self):
         """
@@ -137,22 +130,11 @@ class TestSelectArchitectures(TestCase):
         results = self._run_selected_architectures("dummy-pkg-exclude-exclusive-arch.spec")
         # exclusivearch covers all architectures, but excludearch
         # drops s390x.
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
+        assert results == _all_localhost(**{
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_exclude_exlusive_arch_hermetic(self):
         """
@@ -162,22 +144,14 @@ class TestSelectArchitectures(TestCase):
                                                    ["--hermetic"])
         # exclusivearch covers all architectures, but excludearch
         # drops s390x.
-        assert results == {
+        assert results == _all_localhost(**{
             "deps-x86_64": "linux/amd64",
-            "deps-i686": "localhost",
             "deps-aarch64": "linux/arm64",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
-            "deps-noarch": "localhost",
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
             "build-aarch64": "linux/arm64",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_noarch_and_exclusive_arch(self):
         """
@@ -186,22 +160,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dummy-pkg-noarch.spec",
                                                    ["--hermetic"])
-        assert results == {
-            "deps-i686": "localhost",
-            "deps-x86_64": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
-            "build-i686": "localhost",
-            "build-x86_64": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_exclusive_multiarch(self):
         """
@@ -209,22 +171,9 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dummy-exclusive-arch.spec")
         # exclusivearch cover s390x. (non-hermetic - no deps tasks)
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
-            "build-x86_64": "localhost",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
+        assert results == _all_localhost(**{
             "build-s390x": "linux/s390x",
-            "build-ppc64le": "localhost",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_noarch_exclusive_exlude(self):
         """
@@ -232,22 +181,9 @@ class TestSelectArchitectures(TestCase):
         Noarch task only, platform deterministically selects x86_64.
         """
         results = self._run_selected_architectures("dummy-build-exclusive-exclude-arch.spec")
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-i686": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
-            "build-x86_64": "localhost",
-            "build-aarch64": "localhost",
-            "build-i686": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_noarch_exclusive_exlude_hermetic(self):
         """
@@ -256,22 +192,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dummy-build-exclusive-exclude-arch.spec",
                                                    ["--hermetic"])
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-i686": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
-            "build-x86_64": "localhost",
-            "build-aarch64": "localhost",
-            "build-i686": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_exclude_hermetic(self):
         """
@@ -280,22 +204,18 @@ class TestSelectArchitectures(TestCase):
         results = self._run_selected_architectures("dummy-exclude-arch.spec",
                                                    ["--hermetic"])
         # build on all architectures instead of ExcludeArch s390x
-        assert results == {
+        assert results == _all_localhost(**{
             "deps-i686": "linux/amd64",
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
             "deps-s390": "linux/s390x",
-            "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
-            "deps-noarch": "localhost",
             "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
             "build-s390": "linux/s390x",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_no_specfile(self):
         """
@@ -347,22 +267,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("syntax-error.spec",
                                                    ["--hermetic"])
-        assert results == {
+        assert results == _all_localhost(**{
             "build-aarch64": "linux/arm64",
-            "build-i686": "localhost",
-            "build-ppc64le": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-x86_64": "localhost",
-            "build-noarch": "localhost",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "localhost",
-            "deps-noarch": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-x86_64": "localhost",
-        }
+        })
 
 
     def test_macro_overrides(self):
@@ -371,22 +279,12 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dummy-pkg-for-rhel.spec",
                                                    ["--hermetic", "--target-distribution", "rhel-10"])
-        assert results == {
+        assert results == _all_localhost(**{
             "build-aarch64": "linux/arm64",
-            "build-i686": "localhost",
-            "build-ppc64le": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-x86_64": "linux/amd64",
-            "build-noarch": "localhost",
             "deps-aarch64": "linux/arm64",
-            "deps-i686": "localhost",
-            "deps-noarch": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
             "deps-x86_64": "linux/amd64",
-        }
+        })
 
 
     def test_multiple_statements(self):
@@ -443,24 +341,16 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures("dpdk.spec",["--hermetic", "--platform-labels",
                                                                 "linux-beefy/amd64", "linux-beefy/arm64"])
-        expected_results = {
+        assert results == _all_localhost(**{
             "deps-i686": "linux/amd64",
             "deps-x86_64": "linux/amd64",
             "deps-aarch64": "linux/arm64",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
             "deps-ppc64le": "linux/ppc64le",
-            "deps-noarch": "localhost",
             "build-i686": "linux-beefy/amd64",
             "build-x86_64": "linux-beefy/amd64",
             "build-aarch64": "linux-beefy/arm64",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
             "build-ppc64le": "linux/ppc64le",
-            "build-noarch": "localhost",
-        }
-
-        assert results == expected_results
+        })
 
     def test_platform_override_invalid_format(self):
         """
@@ -479,22 +369,9 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures(
             "dummy-pkg-buildarch-x86_64.spec")
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
+        assert results == _all_localhost(**{
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
-            "build-noarch": "localhost",
-        }
+        })
 
     def test_exclusive_noarch_only(self):
         """
@@ -505,22 +382,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures(
             "dummy-pkg-exclusive-noarch.spec", ["--hermetic"])
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
-            "build-x86_64": "localhost",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_exclusive_noarch_with_real_arch(self):
         """
@@ -529,22 +394,10 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures(
             "dummy-pkg-exclusive-noarch-x86_64.spec", ["--hermetic"])
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
-            "build-x86_64": "localhost",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_all_arches_excluded(self):
         """
@@ -563,22 +416,9 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures(
             "dummy-pkg-exclusive-noarch-no-buildarch.spec")
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
-            "build-x86_64": "localhost",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
+        assert results == _all_localhost(**{
             "build-noarch": "linux/amd64",
-        }
+        })
 
     def test_noarch_excluded(self):
         """
@@ -597,19 +437,7 @@ class TestSelectArchitectures(TestCase):
         """
         results = self._run_selected_architectures(
             "dummy-pkg-mixed-arch-noarch.spec")
-        assert results == {
-            "deps-x86_64": "localhost",
-            "deps-i686": "localhost",
-            "deps-aarch64": "localhost",
-            "deps-s390": "localhost",
-            "deps-s390x": "localhost",
-            "deps-ppc64le": "localhost",
-            "deps-noarch": "localhost",
+        assert results == _all_localhost(**{
             "build-x86_64": "linux/amd64",
-            "build-i686": "localhost",
-            "build-aarch64": "localhost",
-            "build-s390": "localhost",
-            "build-s390x": "localhost",
-            "build-ppc64le": "localhost",
             "build-noarch": "linux/amd64",
-        }
+        })
