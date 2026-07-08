@@ -36,6 +36,7 @@ def _all_localhost(**overrides):
         "build-s390x": "localhost",
         "build-ppc64le": "localhost",
         "build-noarch": "localhost",
+        "noarch-platform-arch": None,
     }
     base.update(overrides)
     return base
@@ -89,6 +90,7 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_basic_multiarch_hermetic(self):
@@ -163,6 +165,7 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_exclusive_multiarch(self):
@@ -183,6 +186,7 @@ class TestSelectArchitectures(TestCase):
         results = self._run_selected_architectures("dummy-build-exclusive-exclude-arch.spec")
         assert results == _all_localhost(**{
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_noarch_exclusive_exlude_hermetic(self):
@@ -195,6 +199,7 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_exclude_hermetic(self):
@@ -385,6 +390,7 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_exclusive_noarch_with_real_arch(self):
@@ -397,6 +403,7 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "deps-noarch": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_all_arches_excluded(self):
@@ -418,6 +425,7 @@ class TestSelectArchitectures(TestCase):
             "dummy-pkg-exclusive-noarch-no-buildarch.spec")
         assert results == _all_localhost(**{
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
 
     def test_noarch_excluded(self):
@@ -440,4 +448,5 @@ class TestSelectArchitectures(TestCase):
         assert results == _all_localhost(**{
             "build-x86_64": "linux/amd64",
             "build-noarch": "linux/amd64",
+            "noarch-platform-arch": "x86_64",
         })
