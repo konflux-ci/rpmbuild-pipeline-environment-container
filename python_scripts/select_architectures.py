@@ -241,25 +241,33 @@ def _main():
         real_arches = build_architectures - {'noarch'}
         if not real_arches:
             real_arches = allowed_architectures
-        for preferred in NOARCH_PLATFORM_PRIORITY:
-            if preferred in real_arches:
-                architecture_decision["build-noarch"] = \
-                    architecture_decision[f"build-{preferred}"]
-                architecture_decision["deps-noarch"] = \
-                    architecture_decision[f"deps-{preferred}"]
-                print(f"noarch platform selected from {preferred}: "
-                      f"{architecture_decision['build-noarch']}")
-                break
+        known_arches = {a for a in real_arches
+                        if f"build-{a}" in architecture_decision}
+        if not known_arches:
+            print("Warning: no known architecture available for noarch "
+                  f"platform selection (real_arches={real_arches}), "
+                  "build-noarch using default")
         else:
-            fallback = sorted(real_arches)[0]
-            architecture_decision["build-noarch"] = \
-                architecture_decision[f"build-{fallback}"]
-            architecture_decision["deps-noarch"] = \
-                architecture_decision[f"deps-{fallback}"]
-            print(f"Warning: no architecture in NOARCH_PLATFORM_PRIORITY "
-                  f"matched available arches {real_arches}, "
-                  f"build-noarch falling back to {fallback}: "
-                  f"{architecture_decision['build-noarch']}")
+            for preferred in NOARCH_PLATFORM_PRIORITY:
+                if preferred in known_arches:
+                    architecture_decision["build-noarch"] = \
+                        architecture_decision[f"build-{preferred}"]
+                    architecture_decision["deps-noarch"] = \
+                        architecture_decision[f"deps-{preferred}"]
+                    print(f"noarch platform selected from {preferred}: "
+                          f"{architecture_decision['build-noarch']}")
+                    break
+            else:
+                fallback = sorted(known_arches)[0]
+                architecture_decision["build-noarch"] = \
+                    architecture_decision[f"build-{fallback}"]
+                architecture_decision["deps-noarch"] = \
+                    architecture_decision[f"deps-{fallback}"]
+                print(f"Warning: no architecture in "
+                      f"NOARCH_PLATFORM_PRIORITY matched available "
+                      f"arches {known_arches}, build-noarch falling "
+                      f"back to {fallback}: "
+                      f"{architecture_decision['build-noarch']}")
 
     # skip disabled architectures
     for key in architecture_decision:
