@@ -27,6 +27,12 @@ lacked a dedicated noarch build task.  The pipeline is adding a `build-noarch`
 Tekton task (analogous to the existing per-arch tasks), requiring the script
 to emit `build-noarch` as a first-class entry in `selected-architectures.json`.
 
+
+There are two basic groups of packages needing this:
+1. kernel (which wants to have firmware and other large noarch things
+built just once)
+2. [java packages](https://docs.fedoraproject.org/en-US/packaging-guidelines/Java/)
+
 ### Problems fixed
 
 1. **`ExclusiveArch: noarch` caused a crash.**  The intersection of
@@ -42,7 +48,13 @@ to emit `build-noarch` as a first-class entry in `selected-architectures.json`.
 
 4. **No dedicated noarch task.**  Noarch builds were mapped to a randomly
    chosen real-arch task, preventing the pipeline from treating noarch as a
-   distinct build subtask.
+   distinct build subtask. This is leading e.g. to logs put into s390x
+   subdirectories which could be confusing for users and also automation.
+   Another point of confusion is that such build will be built just on one arch
+   (compared to noarch subpackages which are build on all archs and compared)
+   while it looks the same on first sight. It should be more explicit that this
+   is not happening (developer can get wrong impression that it was
+   built/tested on all archs).
 
 ## Decision
 
