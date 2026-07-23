@@ -1,9 +1,21 @@
 #! /usr/bin/python3
+"""
+Determine which architectures to build for by parsing ExclusiveArch,
+ExcludeArch, and BuildArch tags from an RPM spec file.
+
+Outputs selected-architectures.json mapping each build-{arch}/deps-{arch}
+task to a container platform (e.g. "linux/amd64") or "localhost" (disabled).
+
+Architecture filtering matches Koji's getArchList() (kojid lines 1379-1409):
+intersect with ExclusiveArch, subtract ExcludeArch, then re-add noarch if it
+appears in BuildArch or ExclusiveArch and is not excluded.  The noarch build
+platform is selected deterministically via NOARCH_PLATFORM_PRIORITY rather
+than Koji's random.choice().
+"""
 
 import argparse
 import json
 import os
-import random
 
 from norpm.specfile import specfile_expand, ParserHooks
 from norpm.exceptions import NorpmError
@@ -12,6 +24,13 @@ from rpm_utils import create_macro_registry, search_specfile
 
 
 WORKDIR = '/var/workdir/source'
+
+# koji selects noarch build arch randomly. Arch pool can be limited by
+# per-tag settings (extra.noarch_arches). We can implement it later if needed,
+# for now it makes more sense to have fixed priority order based on general
+# availability of architectures. If there is not anything available from this list,
+# any remaining available arch is used.
+NOARCH_PLATFORM_PRIORITY = ["x86_64", "aarch64"]
 
 
 def get_arches(name, tags):
@@ -131,6 +150,7 @@ def get_arch_specific_tags(specfile, database, target_distribution):
     return arches
 
 
+# pylint: disable=too-many-branches,too-many-statements
 def _main():
     args = get_params()
 
@@ -151,12 +171,15 @@ def _main():
         "deps-s390": "linux/s390x",
         "deps-s390x": "linux/s390x",
         "deps-ppc64le": "linux/ppc64le",
+        "deps-noarch": "linux/amd64",
         "build-x86_64": "linux/amd64",
         "build-i686": "linux/amd64",
         "build-aarch64": "linux/arm64",
         "build-s390": "linux/s390x",
         "build-s390x": "linux/s390x",
         "build-ppc64le": "linux/ppc64le",
+        "build-noarch": "linux/amd64",
+        "noarch-platform-arch": None,
     }
 
     # Apply Platform Overrides
@@ -172,32 +195,84 @@ def _main():
                 print(f"non-hermetic build, disabling {key} task")
                 architecture_decision[key] = "localhost"
 
-    build_architectures = allowed_architectures
+    build_architectures = set(allowed_architectures)
     if arches['exclusivearch']:
-        print(f"Limit to ExclusiveArch: {arches["exclusivearch"]}")
+        print(f"Limit to ExclusiveArch: {arches['exclusivearch']}")
         build_architectures &= arches["exclusivearch"]
     if arches['excludearch']:
-        print(f"Avoid ExcludeArch: {arches["excludearch"]}")
+        print(f"Avoid ExcludeArch: {arches['excludearch']}")
         build_architectures -= arches["excludearch"]
-    if arches['buildarch'] == set(['noarch']):
-        selected_architectures = [random.choice(list(build_architectures))]
-        print(f"We've randomly selected {selected_architectures[0]} from "
-              f"{build_architectures}")
-    else:
-        # this case we catch other buildArch values instead of noarch, for example buildArch: x86_64.
-        # Value buildArch should be noarch only or specfile should be without buildArch,
-        # but we allow build on all build architectures or list of build architectures
-        # as result of buildExclusive and buildExclude when buildArch is something else than noarch.
+
+    # Koji noarch re-addition (kojid lines 1407-1409): if noarch appears in
+    # BuildArch or ExclusiveArch (and is not in ExcludeArch), add it to the
+    # build set so the noarch task is enabled.
+    if 'noarch' not in arches['excludearch'] and \
+            ('noarch' in arches['buildarch'] or
+             'noarch' in arches['exclusivearch']):
+        build_architectures.add('noarch')
+
+    if not build_architectures:
+        raise SystemExit(
+            f"Error: No valid architectures remain after applying "
+            f"ExclusiveArch ({arches['exclusivearch']}) and "
+            f"ExcludeArch ({arches['excludearch']}) filters "
+            f"against allowed architectures ({allowed_architectures})")
+
+    if arches['buildarch'] == {'noarch'}:
+        if 'noarch' not in build_architectures:
+            raise SystemExit(
+                "Error: BuildArch is noarch but noarch is excluded by "
+                f"ExcludeArch ({arches['excludearch']})")
+        selected_architectures = {'noarch'}
+    elif arches['buildarch']:
+        build_architectures &= arches['buildarch']
+        if not build_architectures:
+            raise SystemExit(
+                f"Error: BuildArch ({arches['buildarch']}) does not match "
+                f"any allowed architecture ({allowed_architectures})")
         selected_architectures = build_architectures
+    else:
+        selected_architectures = build_architectures
+
+    # Pick a platform for build-noarch from available real architectures,
+    # respecting ExclusiveArch/ExcludeArch constraints (Koji choose_taskarch
+    # parity).  Falls back to all allowed architectures if no real arches
+    # remain after filtering (e.g. ExclusiveArch: noarch).
+    if 'noarch' in selected_architectures:
+        real_arches = build_architectures - {'noarch'}
+        if not real_arches:
+            real_arches = allowed_architectures
+        known_arches = {a for a in real_arches
+                        if f"build-{a}" in architecture_decision}
+        if not known_arches:
+            print("Warning: no known architecture available for noarch "
+                  f"platform selection (real_arches={real_arches}), "
+                  "build-noarch using default")
+            architecture_decision["noarch-platform-arch"] = "x86_64"
+        else:
+            chosen = next(
+                (p for p in NOARCH_PLATFORM_PRIORITY if p in known_arches),
+                sorted(known_arches)[0])
+            architecture_decision["build-noarch"] = \
+                architecture_decision[f"build-{chosen}"]
+            architecture_decision["deps-noarch"] = \
+                architecture_decision[f"deps-{chosen}"]
+            architecture_decision["noarch-platform-arch"] = chosen
+            if chosen not in NOARCH_PLATFORM_PRIORITY:
+                print(f"Warning: no architecture in "
+                      f"NOARCH_PLATFORM_PRIORITY matched available "
+                      f"arches {known_arches}, build-noarch falling "
+                      f"back to {chosen}: "
+                      f"{architecture_decision['build-noarch']}")
+            else:
+                print(f"noarch platform selected from {chosen}: "
+                      f"{architecture_decision['build-noarch']}")
 
     # skip disabled architectures
     for key in architecture_decision:
-        found = False
-        for arch_ok in selected_architectures:
-            if key.endswith("-" + arch_ok):
-                found = True
-                break
-        if found:
+        if not (key.startswith("build-") or key.startswith("deps-")):
+            continue
+        if any(key.endswith("-" + a) for a in selected_architectures):
             continue
         print(f"disabling {key} because it is not a selected architecture")
         architecture_decision[key] = "localhost"
