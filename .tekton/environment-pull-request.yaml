@@ -39,11 +39,11 @@ spec:
     resolver: git
     params:
       - name: url
-        value: "https://github.com/konflux-ci/olm-operator-konflux-sample.git"
+        value: '{{source_url}}'
       - name: revision
-        value: main
+        value: "issue-24"
       - name: pathInRepo
-        value: .tekton/multi-arch-build-pipeline.yaml
+        value: .tekton/rpmbuild-pipeline-pull-master-pipeline.yaml
   taskRunTemplate:
     serviceAccountName: build-pipeline-environment
   workspaces:
