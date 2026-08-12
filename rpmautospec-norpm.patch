@@ -16,4 +16,3 @@ variable may not be propagated correctly through the stack
 
  if TYPE_CHECKING:
      from .specparser import SpecParser
-

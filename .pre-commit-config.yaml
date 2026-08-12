@@ -14,11 +14,10 @@ repos:
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
-        name: shellcheck
-        description: Shell script analysis tool
-        types: [shell]
-        exclude: ^certs/
-        args: []
+  - repo: https://github.com/pycqa/pylint
+    rev: v3.3.1
+    hooks:
+      - id: pylint
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
