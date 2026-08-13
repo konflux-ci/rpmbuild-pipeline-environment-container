@@ -9,17 +9,15 @@ on:
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
+    container:
+      image: |
+        quay.io/redhat-artifact-storage/pre-commit-image@sha256:1855171f788b14f66ad0bca65a0543ddbbd460ed7444fc1a70d25d92ee7f1649
 
     steps:
       - name: Repository checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.x'
 
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.1
