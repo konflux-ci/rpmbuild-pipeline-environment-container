@@ -8,6 +8,7 @@
 #   podman run -u root --privileged -it -v $(pwd):/workdir --name rpmbuild-dev rpmbuild-env:dev bash
 # ```
 # The base image is the one built from the Containerfile in the same directory
+# hadolint global ignore=DL3007,DL3041 # latest + dnf install without specific version (for dev purposes)
 FROM rpmbuild-env:latest
 
 ARG WORKDIR=/workdir
