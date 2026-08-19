@@ -22,13 +22,13 @@ Summary: Set of libraries and drivers for fast packet processing
 
 #
 # Note that, while this is dual licensed, all code that is included with this
-# Pakcage are BSD licensed. The only files that aren't licensed via BSD is the
-# kni kernel module which is dual LGPLv2/BSD, and thats not built for fedora.
+# Package are BSD licensed. The only files that aren't licensed via BSD is the
+# kni kernel module which is dual LGPLv2/BSD, and that's not built for fedora.
 #
 License: BSD and LGPLv2 and GPLv2
 
 #
-# The DPDK is designed to optimize througput of network traffic using, among
+# The DPDK is designed to optimize throughput of network traffic using, among
 # other techniques, carefully crafted assembly instructions.  As such it
 # needs extensive work to port it to other architectures.
 #
