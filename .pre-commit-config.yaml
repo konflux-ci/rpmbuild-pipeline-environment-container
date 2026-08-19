@@ -31,3 +31,8 @@ repos:
     hooks:
       - id: codespell
         args: ["-L", "fo"] # often "file object"
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ["-x", "tests/"]

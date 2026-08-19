@@ -7,7 +7,7 @@ This module provides common utilities for SBOM-related operations including:
 """
 
 import logging
-import subprocess
+import subprocess  # nosec B404 - subprocess needed for RPM query operations
 
 from functools import lru_cache
 

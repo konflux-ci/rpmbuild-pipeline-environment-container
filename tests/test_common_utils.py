@@ -270,18 +270,18 @@ class TestRunCommand(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_shell_command(self, mock_run):
-        """Test running shell command (string)."""
+        """Test running shell command (list of string)."""
         mock_result = MagicMock()
         mock_result.stdout = ""
         mock_result.stderr = ""
         mock_result.returncode = 0
         mock_run.return_value = mock_result
 
-        run_command("echo test")
+        run_command(["echo", "test"])
 
         call_args = mock_run.call_args
-        self.assertEqual(call_args[0][0], "echo test")
-        self.assertTrue(call_args[1]["shell"])
+        self.assertEqual(call_args[0][0], ["echo", "test"])
+        self.assertFalse(call_args[1]["shell"])
 
     @patch("subprocess.run")
     def test_command_without_capture(self, mock_run):
