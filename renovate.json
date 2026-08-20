@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>konflux-ci/mintmaker-config//presets/default.json"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^\\.github/workflows/pre-commit\\.yml$"],
+      "matchStrings": [
+        "image:\\s*\\|?\\s+(?<depName>[a-z0-9./-]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    }
+  ]
+}
