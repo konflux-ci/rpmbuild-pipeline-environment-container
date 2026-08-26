@@ -1,0 +1,40 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    tekton.dev/pipelines.minVersion: 0.12.1
+    tekton.dev/tags: rpm-build
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+  name: create-image-mr
+  labels:
+    build.appstudio.redhat.com/multi-platform-required: "true"
+spec:
+  params:
+    - description: Image environment version
+      name: image-environment-version
+      type: string
+  description: |-
+    RPM calculate deps task.
+  results:
+    - name: calculation-artifact
+      description: The Trusted Artifact URI pointing to the artifact with the result of the deps calculation.
+      type: string
+  stepTemplate:
+    volumeMounts:
+      - mountPath: /var/workdir
+        name: workdir
+  steps:
+    - name: print-image-version
+      image: fedora
+      script:
+        #!/bin/bash
+        set -ex
+        echo "image version is $(params.image-environment-version)"
+  volumes:
+    - name: ssh
+      secret:
+        optional: false
+        secretName: multi-platform-ssh-$(context.taskRun.name)
+    - name: workdir
+      emptyDir: {}
