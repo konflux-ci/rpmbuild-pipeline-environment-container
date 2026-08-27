@@ -6,7 +6,7 @@
       "customType": "regex",
       "fileMatch": ["^\\.github/workflows/pre-commit\\.yml$"],
       "matchStrings": [
-        "image:\\s*\\|?\\s*(?<depName>[a-z0-9./-]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+        "image:\\s+(?<depName>[a-zA-Z0-9.:/_-]+)@(?<currentDigest>sha256:[a-f0-9]+)"
       ],
       "datasourceTemplate": "docker",
       "currentValueTemplate": "latest"
