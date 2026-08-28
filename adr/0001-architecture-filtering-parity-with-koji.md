@@ -91,7 +91,7 @@ requests it via `BuildArch` or `ExclusiveArch`, and it is blocked when
 ### `noarch` is NOT in the allowed architecture set
 
 The `allowed_architectures` set (populated from CLI args) contains only real
-architectures (`x86_64`, `i686`, `aarch64`, `ppc64le`, `s390`, `s390x`).
+architectures (`x86_64`, `i686`, `aarch64`, `ppc64le`, `ppc64`, `s390`, `s390x`).
 `noarch` enters the build set exclusively through the re-addition logic above.
 This prevents noarch from surviving `ExclusiveArch`/`ExcludeArch` filters
 meant for real architectures.
