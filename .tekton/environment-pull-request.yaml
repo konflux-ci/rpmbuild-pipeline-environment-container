@@ -1,3 +1,4 @@
+---
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
@@ -19,34 +20,34 @@ metadata:
   namespace: rpm-build-pipeline-tenant
 spec:
   params:
-  - name: git-url
-    value: '{{source_url}}'
-  - name: revision
-    value: '{{revision}}'
-  - name: output-image
-    value: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:on-pr-{{revision}}
-  - name: image-expires-after
-    value: 5d
-  - name: dockerfile
-    value: /Containerfile
-  - name: build-platforms
-    value:
-      - linux/x86_64
-      - linux/arm64
-      - linux/ppc64le
-      - linux/s390x
+    - name: git-url
+      value: '{{source_url}}'
+    - name: revision
+      value: '{{revision}}'
+    - name: output-image
+      value: quay.io/redhat-user-workloads/rpm-build-pipeline-tenant/environment:on-pr-{{revision}}
+    - name: image-expires-after
+      value: 5d
+    - name: dockerfile
+      value: /Containerfile
+    - name: build-platforms
+      value:
+        - linux/x86_64
+        - linux/arm64
+        - linux/ppc64le
+        - linux/s390x
   pipelineRef:
-    resolver: git
+    resolver: bundles
     params:
-      - name: url
-        value: "https://github.com/konflux-ci/olm-operator-konflux-sample.git"
-      - name: revision
-        value: main
-      - name: pathInRepo
-        value: .tekton/multi-arch-build-pipeline.yaml
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/pipeline-docker-build-multi-platform-oci-ta@sha256:06efc469e706cf5377a44cd34280e2d08e3f8c3b63eabefc8c7882f9a55618d3
+      - name: name
+        value: docker-build-multi-platform-oci-ta
+      - name: kind
+        value: pipeline
   taskRunTemplate:
     serviceAccountName: build-pipeline-environment
   workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
+    - name: git-auth
+      secret:
+        secretName: '{{ git_auth_secret }}'
