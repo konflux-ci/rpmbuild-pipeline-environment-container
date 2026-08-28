@@ -17,7 +17,7 @@ import pytest
 from select_architectures import _main as select_architectures
 from select_architectures import get_arch_specific_tags
 
-SELECTED_ARCHES = ["x86_64", "i686", "ppc64le", "s390", "s390x", "aarch64"]
+SELECTED_ARCHES = ["x86_64", "i686", "ppc64le", "ppc64", "s390", "s390x", "aarch64"]
 
 
 def _all_localhost(overrides):
@@ -28,6 +28,7 @@ def _all_localhost(overrides):
         "deps-s390": "localhost",
         "deps-s390x": "localhost",
         "deps-ppc64le": "localhost",
+        "deps-ppc64": "localhost",
         "deps-noarch": "localhost",
         "build-x86_64": "localhost",
         "build-i686": "localhost",
@@ -35,6 +36,7 @@ def _all_localhost(overrides):
         "build-s390": "localhost",
         "build-s390x": "localhost",
         "build-ppc64le": "localhost",
+        "build-ppc64": "localhost",
         "build-noarch": "localhost",
         "noarch-platform-arch": None,
     }
@@ -215,11 +217,13 @@ class TestSelectArchitectures(TestCase):
             "deps-aarch64": "linux/arm64",
             "deps-s390": "linux/s390x",
             "deps-ppc64le": "linux/ppc64le",
+            "deps-ppc64": "linux/ppc64",
             "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
             "build-s390": "linux/s390x",
             "build-ppc64le": "linux/ppc64le",
+            "build-ppc64": "linux/ppc64",
         })
 
     def test_no_specfile(self):
