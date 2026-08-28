@@ -29,6 +29,7 @@ def _all_localhost(overrides):
         "deps-s390x": "localhost",
         "deps-ppc64le": "localhost",
         "deps-noarch": "localhost",
+        "deps-riscv64": "localhost",
         "build-x86_64": "localhost",
         "build-i686": "localhost",
         "build-aarch64": "localhost",
@@ -36,6 +37,7 @@ def _all_localhost(overrides):
         "build-s390x": "localhost",
         "build-ppc64le": "localhost",
         "build-noarch": "localhost",
+        "build-riscv64": "localhost",
         "noarch-platform-arch": None,
     }
     base.update(overrides)
