@@ -6,7 +6,7 @@ Summary:	A dummy package
 License:	GPLv3+
 URL:		http://example.com/
 
-ExcludeArch:	x86_64 i686 ppc64le s390 s390x aarch64
+ExcludeArch:	x86_64 i686 ppc64le ppc64 s390 s390x aarch64
 
 Source0:	https://raw.githubusercontent.com/praiskup/quick-package/master/README.xz
 
