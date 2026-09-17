@@ -20,6 +20,7 @@ ADD site-defaults.cfg /etc/mock/site-defaults.cfg
 ADD python_scripts/*.py /usr/local/bin
 
 # TODO: We need to find a better place for this datafile (and autogenerate it)
+# https://raw.githubusercontent.com/praiskup/norpm-macro-overrides/refs/heads/main/distro-arch-specific.json
 ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 
 ADD patch-git-prepare.sh /usr/local/bin
