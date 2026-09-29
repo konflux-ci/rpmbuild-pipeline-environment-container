@@ -36,3 +36,13 @@ repos:
     hooks:
       - id: bandit
         args: ["-x", "tests/"]
+# Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.0.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-requests
+          - types-toml
+        args: [--ignore-missing-imports, --show-error-codes]
+        # Check both source and test files
