@@ -219,13 +219,13 @@ class TestSelectArchitectures(TestCase):
             "deps-aarch64": "linux/arm64",
             "deps-s390": "linux/s390x",
             "deps-ppc64le": "linux/ppc64le",
-            "deps-ppc64": "linux/ppc64",
+            "deps-ppc64": "linux/ppc64be",
             "build-i686": "linux/amd64",
             "build-x86_64": "linux/amd64",
             "build-aarch64": "linux/arm64",
             "build-s390": "linux/s390x",
             "build-ppc64le": "linux/ppc64le",
-            "build-ppc64": "linux/ppc64",
+            "build-ppc64": "linux/ppc64be",
         })
 
     def test_no_specfile(self):
