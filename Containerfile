@@ -1,5 +1,5 @@
 # hadolint global ignore=DL3020,DL3041 # ADD vs COPY, dnf install without specific version
-FROM registry.fedoraproject.org/fedora:44@sha256:ba35579e107f26a4c2c000390fb3ff549f3858a9584a6b5a35f7fa51f54de309
+FROM registry.fedoraproject.org/fedora:45@sha256:dbb22055c0c19f4eba2afbbb717667b0c76aa956c4283700041980ad3710bb73
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
 
@@ -10,7 +10,9 @@ RUN \
     dnf -y --nodocs --setopt=install_weak_deps=False install \
         mock koji dist-git-client patch python3-norpm python3-specfile python3-click redhat-rpm-config \
         acl rpmautospec jq rpmlint podman skopeo dnf-utils license-validate && \
-    patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
+    SPECPARSER="/usr/lib/python3.*/site-packages/rpmautospec/specparser.py" && \
+    patch "$SPECPARSER" < rpmautospec-norpm.patch && \
+    grep -q 'parser_type = "norpm"' "$SPECPARSER" && \
     dnf -y clean all && \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
