@@ -415,7 +415,8 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
 
     For each RPM SBOM file in the directory:
     - Match it to an SRPM or binary RPM package by NVRA
-    - Rename the document root to avoid ID collisions
+    - Rename the document root, and any element whose SPDXID is taken already,
+      to avoid ID collisions
     - Merge all packages, files, and relationships
     - Create CONTAINS relationship from RPM to document root
 
@@ -439,7 +440,13 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
         logging.info("No .sbom.json files found in %s", syft_sbom_dir)
         return
 
-    for sbom_file in sbom_files:
+    # SPDXIDs used by the merged document so far. Sorted below, so that the
+    # renaming does not depend on the glob order.
+    used_ids = {item["SPDXID"]
+                for item in sbom_root.get("packages", []) + sbom_root.get("files", [])
+                if item.get("SPDXID")}
+
+    for sbom_file in sorted(sbom_files):
         # Extract NVRA from filename
         # Expected format: {nvra}.sbom.json
         base_name = os.path.basename(sbom_file)
@@ -468,22 +475,24 @@ def attach_syft_sboms(sbom_root, syft_sbom_dir):
             logging.warning("Skipping RPM SBOM %s: could not find document root", nvra)
             continue
 
-        # Replace old root ID with new root ID in packages
-        for pkg in rpm_sbom.get("packages", []):
-            if pkg.get("SPDXID") == old_root_id:
-                pkg["SPDXID"] = new_root_id
+        # Rename the document root, plus anything else that would collide.
+        # syft derives an SPDXID from the file path only, so the same path in
+        # several RPMs - e.g. a library, or a symlink to it, built for every
+        # architecture - gets the very same ID in each of their SBOMs.
+        renames = {old_root_id: new_root_id}
+        for item in rpm_sbom.get("packages", []) + rpm_sbom.get("files", []):
+            spdxid = item.get("SPDXID")
+            if spdxid in used_ids and spdxid not in renames:
+                renames[spdxid] = f"{spdxid}-{nvra}".replace('_', '-')
+                logging.debug("Renaming duplicate SPDXID %s to %s", spdxid, renames[spdxid])
+            item["SPDXID"] = renames.get(spdxid, spdxid)
+            used_ids.add(item["SPDXID"])
 
-        # Replace old root ID with new root ID in files
-        for file_item in rpm_sbom.get("files", []):
-            if file_item.get("SPDXID") == old_root_id:
-                file_item["SPDXID"] = new_root_id
-
-        # Replace old root ID with new root ID in relationships
+        # Apply the renames to relationships
         for rel in rpm_sbom.get("relationships", []):
-            if rel.get("spdxElementId") == old_root_id:
-                rel["spdxElementId"] = new_root_id
-            if rel.get("relatedSpdxElement") == old_root_id:
-                rel["relatedSpdxElement"] = new_root_id
+            for key in ("spdxElementId", "relatedSpdxElement"):
+                if rel.get(key) in renames:
+                    rel[key] = renames[rel[key]]
 
         # Merge packages, files, and relationships into root SBOM
         sbom_root.setdefault("packages", []).extend(rpm_sbom.get("packages", []))

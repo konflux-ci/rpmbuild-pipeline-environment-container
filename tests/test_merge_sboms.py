@@ -1271,6 +1271,155 @@ class TestAttachSyftSboms(unittest.TestCase):
         # Should not modify SBOM
         self.assertEqual(len(sbom_root["packages"]), 1)
 
+    def test_attach_syft_sboms_duplicate_file_ids(self):
+        """Test that a file path shared by several arches doesn't produce duplicate SPDXIDs."""
+        # syft derives the file SPDXID from the path only, so the same .so (or a
+        # symlink to it) built for two arches gets the very same ID
+        shared_file_id = "SPDXRef-File-auto-Sys-Guestfs-Guestfs.so-abcdef0123456789"
+        arches = ["x86_64", "aarch64"]
+
+        sbom_root = {
+            "packages": [
+                {
+                    "SPDXID": f"SPDXRef-{arch}-perl-Sys-Guestfs".replace('_', '-'),
+                    "packageFileName": f"perl-Sys-Guestfs-1.0-1.el9.{arch}.rpm",
+                }
+                for arch in arches
+            ],
+            "files": [],
+            "relationships": []
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for arch in arches:
+                sbom_file = os.path.join(tmpdir, f"perl-Sys-Guestfs-1.0-1.el9.{arch}.sbom.json")
+                with open(sbom_file, 'w', encoding="utf-8") as f:
+                    json.dump({
+                        "packages": [
+                            {"SPDXID": "SPDXRef-DocumentRoot-Directory", "name": arch}
+                        ],
+                        "files": [
+                            {
+                                "SPDXID": shared_file_id,
+                                "fileName": "./usr/lib64/perl5/vendor_perl/auto/Sys/Guestfs/Guestfs.so",
+                            }
+                        ],
+                        "relationships": [
+                            {
+                                "spdxElementId": "SPDXRef-DOCUMENT",
+                                "relationshipType": "DESCRIBES",
+                                "relatedSpdxElement": "SPDXRef-DocumentRoot-Directory"
+                            },
+                            {
+                                "spdxElementId": "SPDXRef-DocumentRoot-Directory",
+                                "relationshipType": "CONTAINS",
+                                "relatedSpdxElement": shared_file_id
+                            }
+                        ]
+                    }, f)
+
+            attach_syft_sboms(sbom_root, tmpdir)
+
+        # Both files are kept, but with distinct SPDXIDs. SBOMs are merged in
+        # sorted order, so aarch64 keeps the original ID and x86_64 is renamed.
+        renamed_file_id = f"{shared_file_id}-perl-Sys-Guestfs-1.0-1.el9.x86-64"
+        file_ids = [f["SPDXID"] for f in sbom_root["files"]]
+        self.assertEqual(sorted(file_ids), sorted([shared_file_id, renamed_file_id]))
+
+        # All SPDXIDs in the merged document are unique
+        all_ids = [p["SPDXID"] for p in sbom_root["packages"]] + file_ids
+        self.assertEqual(len(all_ids), len(set(all_ids)))
+
+        # The renamed file is still referenced by the arch it came from
+        x86_root = "SPDXRef-Directory-Root-perl-Sys-Guestfs-1.0-1.el9.x86-64"
+        contained = [r["relatedSpdxElement"] for r in sbom_root["relationships"]
+                     if r["spdxElementId"] == x86_root
+                     and r["relationshipType"] == "CONTAINS"]
+        self.assertEqual(contained, [renamed_file_id])
+
+    def test_attach_syft_sboms_duplicate_pkg_ids(self):
+        """Test that packages found in several RPMs don't produce duplicate SPDXIDs."""
+        sbom_root = {
+            "packages": [
+                {
+                    "SPDXID": "SPDXRef-x86-64-foo",
+                    "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
+                },
+                {
+                    "SPDXID": "SPDXRef-aarch64-foo",
+                    "packageFileName": "foo-1.0-1.el9.aarch64.rpm"
+                }
+            ],
+            "files": [],
+            "relationships": []
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for arch in ("x86_64", "aarch64"):
+                sbom_file = os.path.join(tmpdir, f"foo-1.0-1.el9.{arch}.sbom.json")
+                with open(sbom_file, 'w', encoding="utf-8") as f:
+                    json.dump({
+                        "packages": [
+                            {"SPDXID": "SPDXRef-DocumentRoot-Directory", "name": arch},
+                            {"SPDXID": "SPDXRef-Package-python-vendored-1.0", "name": "vendored"}
+                        ],
+                        "files": [],
+                        "relationships": [
+                            {
+                                "spdxElementId": "SPDXRef-DOCUMENT",
+                                "relationshipType": "DESCRIBES",
+                                "relatedSpdxElement": "SPDXRef-DocumentRoot-Directory"
+                            }
+                        ]
+                    }, f)
+
+            attach_syft_sboms(sbom_root, tmpdir)
+
+        spdx_ids = [p["SPDXID"] for p in sbom_root["packages"]]
+        self.assertEqual(len(spdx_ids), len(set(spdx_ids)))
+        self.assertIn("SPDXRef-Package-python-vendored-1.0", spdx_ids)
+        self.assertIn("SPDXRef-Package-python-vendored-1.0-foo-1.0-1.el9.x86-64", spdx_ids)
+
+    def test_attach_syft_sboms_duplicate_in_root(self):
+        """Test that IDs already present in the root SBOM are not reused."""
+        sbom_root = {
+            "packages": [
+                {
+                    "SPDXID": "SPDXRef-x86-64-foo",
+                    "packageFileName": "foo-1.0-1.el9.x86_64.rpm"
+                }
+            ],
+            "files": [
+                {"SPDXID": "SPDXRef-File-README-0123456789abcdef", "fileName": "./README"}
+            ],
+            "relationships": []
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sbom_file = os.path.join(tmpdir, "foo-1.0-1.el9.x86_64.sbom.json")
+            with open(sbom_file, 'w', encoding="utf-8") as f:
+                json.dump({
+                    "packages": [{"SPDXID": "SPDXRef-DocumentRoot-Directory", "name": "foo"}],
+                    "files": [
+                        {"SPDXID": "SPDXRef-File-README-0123456789abcdef", "fileName": "./README"}
+                    ],
+                    "relationships": [
+                        {
+                            "spdxElementId": "SPDXRef-DOCUMENT",
+                            "relationshipType": "DESCRIBES",
+                            "relatedSpdxElement": "SPDXRef-DocumentRoot-Directory"
+                        }
+                    ]
+                }, f)
+
+            attach_syft_sboms(sbom_root, tmpdir)
+
+        file_ids = [f["SPDXID"] for f in sbom_root["files"]]
+        self.assertEqual(file_ids, [
+            "SPDXRef-File-README-0123456789abcdef",
+            "SPDXRef-File-README-0123456789abcdef-foo-1.0-1.el9.x86-64",
+        ])
+
     def test_attach_syft_sboms_none_dir(self):
         """Test handling of None syft_sbom_dir."""
         sbom_root = {
