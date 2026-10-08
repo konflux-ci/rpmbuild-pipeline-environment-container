@@ -5,14 +5,14 @@ upstream rpmautospec, rather than relying on the existing approach: Using an
 environment variable lacks reliability—for instance, there is a risk the
 variable may not be propagated correctly through the stack
 
---- a/rpmautospec/pkg_history.py        2026-03-18 01:00:00.000000000 +0100
-+++ b/rpmautospec/pkg_history.py        2026-03-24 09:50:41.657815984 +0100
-@@ -12,7 +12,7 @@
- from .changelog import ChangelogEntry
- from .compat import BlobIO, pygit2, rpm
- from .magic_comments import parse_magic_comments
--from .specparser import AutoSpecParser, SpecParserError
-+from .specparser import NoRPMSpecParser as AutoSpecParser, SpecParserError
+--- a/rpmautospec/specparser.py	2026-03-18 01:00:00.000000000 +0100
++++ b/rpmautospec/specparser.py	2026-03-24 09:50:41.657815984 +0100
+@@ -131,7 +131,7 @@
+     _concrete_parser: SpecParser
 
- if TYPE_CHECKING:
-     from .specparser import SpecParser
+     def __init__(self) -> None:
+-        parser_type = os.environ.get("RPMAUTOSPEC_SPEC_PARSER", "rpm").lower()
++        parser_type = "norpm"  # Force NoRPMSpecParser for security
+         if parser_type == "rpm":
+             self._concrete_parser = RPMSpecParser()
+         elif parser_type == "norpm":  # pragma: has-norpm
