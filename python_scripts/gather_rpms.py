@@ -31,15 +31,15 @@ KOJI_BUILDROOT_METADATA_FILE = "/tmp/konflux-extra-koji-metadata.json"  # nosec 
 # TODO - pipeline_url
 
 srpm = None
-rpms = {}
-noarch_rpms = []
-source_archs = {}
-logs = []
-buildroots = {}
+rpms: dict[str, list[str]] = {}
+noarch_rpms: list[str] = []
+source_archs: dict[str, str] = {}
+logs: list[tuple[str, str]] = []
+buildroots: dict[str, dict] = {}
 # An overall {arch: {"rpms": [rpm...], lockfile: "<arch>/results/buildroot_lock.json"},...} dict,
 # to gather all (S)RPMs per buildroot arch, instead of relying on the symlink dest,
 # so that we can generate the correct SBOM later with `merge_sbom`.
-broot_arch_rpms = {}
+broot_arch_rpms: dict[str, dict] = {}
 
 current_time = datetime.datetime.now()
 
