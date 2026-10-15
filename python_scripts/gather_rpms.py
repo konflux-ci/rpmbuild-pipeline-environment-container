@@ -26,6 +26,8 @@ BROOT_ARCH_RPMS_JSON = "buildroot_rpms.json"
 # event_id: koji event id of build repo creation
 # {"repo_id": <repo_id>, "buildroot_tag": <buildroot_tag>, "event_id": <event_id>}
 # Note: /tmp path is provided by pipeline environment, not user-controlled
+# Keys from this file are merged into extra._export_source (not the same as
+# the --custom-user-metadata flag, which sets extra.custom_user_metadata).
 KOJI_BUILDROOT_METADATA_FILE = "/tmp/konflux-extra-koji-metadata.json"  # nosec B108
 
 # TODO - pipeline_url
@@ -42,6 +44,19 @@ buildroots: dict[str, dict] = {}
 broot_arch_rpms: dict[str, dict] = {}
 
 current_time = datetime.datetime.now()
+
+
+def parse_custom_user_metadata(value):
+    """Parse --custom-user-metadata JSON string; return None if unset/empty."""
+    if not value or not value.strip():
+        return None
+    try:
+        data = json.loads(value)
+    except ValueError as err:
+        raise ValueError(f"--custom-user-metadata is not valid JSON: {err}") from err
+    if not isinstance(data, dict):
+        raise ValueError("--custom-user-metadata must be a JSON object")
+    return data
 
 
 def symlink(src, arch, prepend_arch=False):
@@ -252,6 +267,11 @@ def create_md_file(cli_options, extra_metadata=None):
         for key in extra_metadata:
             extra["_export_source"][key] = extra_metadata[key]
 
+    # Add custom_user_metadata if provided (stored at top level of extra)
+    custom = parse_custom_user_metadata(getattr(cli_options, "custom_user_metadata", None))
+    if custom:
+        extra["custom_user_metadata"] = custom
+
     build = {
         "name": nevr["name"],
         "version": nevr["version"],
@@ -350,9 +370,16 @@ if __name__ == "__main__":
     parser.add_argument("--pipeline-id", action="store", required=True)
     parser.add_argument("--owner", type=str, default=None,
                         help="Build owner if known")
+    parser.add_argument("--custom-user-metadata", action="store", default=None,
+                        help="JSON object stored under the build's "
+                             "extra.custom_user_metadata field")
     parser.add_argument("-d", "--debug", default=False, action="store_true",
                         help="Debugging output")
     options = parser.parse_args()
+
+    # Validate custom_user_metadata early to fail fast
+    if options.custom_user_metadata:
+        parse_custom_user_metadata(options.custom_user_metadata)
 
     if options.debug:
         logging.basicConfig(level=logging.DEBUG)

@@ -4,6 +4,7 @@ Tests gather_rpms.py.
 
 # pylint: disable=W0201,C0116,R0801
 
+from argparse import Namespace
 import json
 import os
 import shutil
@@ -501,6 +502,261 @@ class TestHandleArchdirIntegration(unittest.TestCase):
 
         # No symlinks should have been created for x86_64
         mock_symlink.assert_not_called()
+
+
+class TestParseCustomUserMetadata(unittest.TestCase):
+    """Unit tests for parse_custom_user_metadata function."""
+
+    def test_valid_object(self):
+        """Test with valid JSON object."""
+        result = gather_rpms.parse_custom_user_metadata('{"mr_iid": 496, "key": "value"}')
+        self.assertEqual(result, {"mr_iid": 496, "key": "value"})
+
+    def test_none_value(self):
+        """Test with None value."""
+        result = gather_rpms.parse_custom_user_metadata(None)
+        self.assertIsNone(result)
+
+    def test_empty_string(self):
+        """Test with empty string."""
+        result = gather_rpms.parse_custom_user_metadata("")
+        self.assertIsNone(result)
+
+    def test_whitespace_only(self):
+        """Test with whitespace-only string."""
+        result = gather_rpms.parse_custom_user_metadata("   ")
+        self.assertIsNone(result)
+
+    def test_empty_object(self):
+        """Test with empty JSON object - returns falsy dict."""
+        result = gather_rpms.parse_custom_user_metadata("{}")
+        self.assertEqual(result, {})
+
+    def test_invalid_json_raises(self):
+        """Test that invalid JSON raises ValueError."""
+        with self.assertRaises(ValueError) as cm:
+            gather_rpms.parse_custom_user_metadata("{bad")
+        self.assertIn("not valid JSON", str(cm.exception))
+
+    def test_json_array_raises(self):
+        """Test that JSON array raises ValueError."""
+        with self.assertRaises(ValueError) as cm:
+            gather_rpms.parse_custom_user_metadata("[1, 2, 3]")
+        self.assertIn("must be a JSON object", str(cm.exception))
+
+    def test_json_string_raises(self):
+        """Test that JSON string raises ValueError."""
+        with self.assertRaises(ValueError) as cm:
+            gather_rpms.parse_custom_user_metadata('"string"')
+        self.assertIn("must be a JSON object", str(cm.exception))
+
+    def test_json_number_raises(self):
+        """Test that JSON number raises ValueError."""
+        with self.assertRaises(ValueError) as cm:
+            gather_rpms.parse_custom_user_metadata('42')
+        self.assertIn("must be a JSON object", str(cm.exception))
+
+
+class TestCreateMdFile(unittest.TestCase):
+    """Unit tests for create_md_file function."""
+
+    def setUp(self):
+        """Set up test environment."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_dir = os.getcwd()
+        os.chdir(self.temp_dir)
+
+        # Create staging directory
+        os.makedirs(STAGING_DIR)
+        os.makedirs(os.path.join(STAGING_DIR, "x86_64"))
+
+        # Reset global variables
+        gather_rpms.srpm = "test-1-1.fc42.src.rpm"
+        gather_rpms.rpms = {"x86_64": ["test-1-1.fc42.x86_64.rpm"]}
+        gather_rpms.noarch_rpms = ["test-noarch-1-1.fc42.noarch.rpm"]
+        gather_rpms.source_archs = {
+            "test-1-1.fc42.src.rpm": "x86_64",
+            "test-noarch-1-1.fc42.noarch.rpm": "x86_64"
+        }
+        gather_rpms.logs = [("x86_64", "build.log")]
+        gather_rpms.buildroots = {
+            "x86_64": {
+                "content_generator": {"name": "konflux", "version": "0.1"},
+                "container": {"type": "docker", "arch": "x86_64"},
+                "host": {"os": "RHEL", "arch": "x86_64"},
+                "components": [],
+                "tools": [],
+                "extra": {"konflux": {"pipeline_id": "test/pipeline-123"}},
+            }
+        }
+
+        # Create dummy RPM files in staging
+        for rpm in [gather_rpms.srpm, "test-noarch-1-1.fc42.noarch.rpm"]:
+            with open(os.path.join(STAGING_DIR, rpm), 'wb') as f:
+                f.write(b'dummy')
+        for rpm in gather_rpms.rpms["x86_64"]:
+            with open(os.path.join(STAGING_DIR, rpm), 'wb') as f:
+                f.write(b'dummy')
+        # Create dummy log file
+        with open(os.path.join(STAGING_DIR, "x86_64", "build.log"), 'w', encoding='utf-8') as f:
+            f.write("test log")
+
+    def tearDown(self):
+        """Clean up test environment."""
+        os.chdir(self.original_dir)
+        shutil.rmtree(self.temp_dir)
+        gather_rpms.srpm = None
+        gather_rpms.rpms.clear()
+        gather_rpms.noarch_rpms.clear()
+        gather_rpms.source_archs.clear()
+        gather_rpms.logs.clear()
+        gather_rpms.buildroots.clear()
+
+    @patch('gather_rpms.calc_checksum')
+    @patch('gather_rpms.koji.get_header_fields')
+    def test_custom_user_metadata_present(self, mock_get_header, mock_checksum):
+        """Test that custom_user_metadata is added when provided."""
+        mock_get_header.return_value = {
+            'name': 'test', 'version': '1', 'release': '1.fc42',
+            'epoch': None, 'arch': 'x86_64'
+        }
+        mock_checksum.return_value = 'deadbeef'
+
+        options = Namespace(
+            pipeline_id="test/pipeline-123",
+            source_url="git+https://example.com/repo#abc123",
+            start_time=1234567890,
+            end_time=1234567900,
+            owner=None,
+            custom_user_metadata='{"mr_iid": 496, "target_branch": "rhel-9.6.0"}'
+        )
+
+        gather_rpms.create_md_file(options, extra_metadata=None)
+
+        # Read the generated file
+        cg_import_path = os.path.join(STAGING_DIR, gather_rpms.CG_IMPORT_JSON)
+        with open(cg_import_path, 'r', encoding='utf-8') as f:
+            md = json.load(f)
+
+        # Verify custom_user_metadata is present at the right level
+        self.assertIn("custom_user_metadata", md["build"]["extra"])
+        self.assertEqual(md["build"]["extra"]["custom_user_metadata"], {
+            "mr_iid": 496,
+            "target_branch": "rhel-9.6.0"
+        })
+
+        # Verify it's NOT inside _export_source
+        self.assertNotIn("custom_user_metadata", md["build"]["extra"]["_export_source"])
+
+        # Verify _export_source still has its normal keys
+        self.assertIn("_export_source", md["build"]["extra"])
+        self.assertEqual(md["build"]["extra"]["_export_source"]["source"], "konflux")
+
+    @patch('gather_rpms.calc_checksum')
+    @patch('gather_rpms.koji.get_header_fields')
+    def test_custom_user_metadata_absent(self, mock_get_header, mock_checksum):
+        """Test that custom_user_metadata is omitted when not provided."""
+        mock_get_header.return_value = {
+            'name': 'test', 'version': '1', 'release': '1.fc42',
+            'epoch': None, 'arch': 'x86_64'
+        }
+        mock_checksum.return_value = 'deadbeef'
+
+        options = Namespace(
+            pipeline_id="test/pipeline-123",
+            source_url="git+https://example.com/repo#abc123",
+            start_time=1234567890,
+            end_time=1234567900,
+            owner=None
+            # no custom_user_metadata attribute
+        )
+
+        gather_rpms.create_md_file(options, extra_metadata=None)
+
+        # Read the generated file
+        cg_import_path = os.path.join(STAGING_DIR, gather_rpms.CG_IMPORT_JSON)
+        with open(cg_import_path, 'r', encoding='utf-8') as f:
+            md = json.load(f)
+
+        # Verify custom_user_metadata is NOT present
+        self.assertNotIn("custom_user_metadata", md["build"]["extra"])
+
+        # Verify _export_source is still present and unchanged
+        self.assertIn("_export_source", md["build"]["extra"])
+        self.assertEqual(md["build"]["extra"]["_export_source"]["source"], "konflux")
+
+    @patch('gather_rpms.calc_checksum')
+    @patch('gather_rpms.koji.get_header_fields')
+    def test_custom_user_metadata_empty_string(self, mock_get_header, mock_checksum):
+        """Test that custom_user_metadata is omitted when empty string."""
+        mock_get_header.return_value = {
+            'name': 'test', 'version': '1', 'release': '1.fc42',
+            'epoch': None, 'arch': 'x86_64'
+        }
+        mock_checksum.return_value = 'deadbeef'
+
+        options = Namespace(
+            pipeline_id="test/pipeline-123",
+            source_url="git+https://example.com/repo#abc123",
+            start_time=1234567890,
+            end_time=1234567900,
+            owner=None,
+            custom_user_metadata=""
+        )
+
+        gather_rpms.create_md_file(options, extra_metadata=None)
+
+        # Read the generated file
+        cg_import_path = os.path.join(STAGING_DIR, gather_rpms.CG_IMPORT_JSON)
+        with open(cg_import_path, 'r', encoding='utf-8') as f:
+            md = json.load(f)
+
+        # Verify custom_user_metadata is NOT present
+        self.assertNotIn("custom_user_metadata", md["build"]["extra"])
+
+    @patch('gather_rpms.calc_checksum')
+    @patch('gather_rpms.koji.get_header_fields')
+    def test_custom_and_extra_metadata_coexist(
+            self, mock_get_header, mock_checksum):
+        """Test that custom_user_metadata and extra_metadata both work."""
+        mock_get_header.return_value = {
+            'name': 'test', 'version': '1', 'release': '1.fc42',
+            'epoch': None, 'arch': 'x86_64'
+        }
+        mock_checksum.return_value = 'deadbeef'
+
+        options = Namespace(
+            pipeline_id="test/pipeline-123",
+            source_url="git+https://example.com/repo#abc123",
+            start_time=1234567890,
+            end_time=1234567900,
+            owner=None,
+            custom_user_metadata='{"mr_iid": 496}'
+        )
+
+        # extra_metadata simulates the KOJI_BUILDROOT_METADATA_FILE content
+        extra_metadata = {
+            "repo_id": 123456,
+            "buildroot_tag": "rhel-9.6.0-build",
+            "event_id": 789
+        }
+
+        gather_rpms.create_md_file(options, extra_metadata=extra_metadata)
+
+        # Read the generated file
+        cg_import_path = os.path.join(STAGING_DIR, gather_rpms.CG_IMPORT_JSON)
+        with open(cg_import_path, 'r', encoding='utf-8') as f:
+            md = json.load(f)
+
+        # Verify custom_user_metadata is at top level of extra
+        self.assertIn("custom_user_metadata", md["build"]["extra"])
+        self.assertEqual(md["build"]["extra"]["custom_user_metadata"], {"mr_iid": 496})
+
+        # Verify extra_metadata keys are in _export_source
+        self.assertEqual(md["build"]["extra"]["_export_source"]["repo_id"], 123456)
+        self.assertEqual(md["build"]["extra"]["_export_source"]["buildroot_tag"],
+                         "rhel-9.6.0-build")
+        self.assertEqual(md["build"]["extra"]["_export_source"]["event_id"], 789)
 
 
 if __name__ == "__main__":
