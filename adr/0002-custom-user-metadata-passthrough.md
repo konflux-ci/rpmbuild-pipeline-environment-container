@@ -64,19 +64,20 @@ as a JSON object (matching Koji's own CLI validation in
   example, RoG will put `{"mr_iid": "496", "target_branch": "rhel-9.6.0"}` there,
   while other consumers can define their own schema.
 
-- **Fail loudly:** Invalid JSON or non-object values raise `ValueError` with a
-  clear error message echoing the offending value. This is critical because:
+- **Fail loudly:** Invalid JSON or non-object values raise
+  `argparse.ArgumentTypeError` with a clear error message echoing the offending
+  value. This is critical because:
   - The value comes from a static PipelineRun template authored by a human, so
     malformed input is deterministic and discovered on the first run
   - Silently dropping the metadata would reintroduce the wrong-build-promoted
     bug at a point where nobody is watching the log
-  - This runs in the very last pipeline task, so early validation (immediately
-    after `argparse`) minimizes wasted time on error
+  - Validation happens during argument parsing via the `type=` parameter, so
+    the script fails fast before any work begins
 
 - **Empty/absent → omit key entirely:** When the value is `None`, empty string,
-  or whitespace-only, the key is omitted from `extra` rather than set to `{}`.
-  This ensures backward compatibility: existing builds without the metadata are
-  indistinguishable from new builds where the param was left empty.
+  empty dict or whitespace-only, the key is omitted from `extra` rather than
+  set to `{}`. This ensures backward compatibility: existing builds without
+  the metadata are indistinguishable from new builds where the param was left empty.
 
 ### Pipeline integration via secure environment variable
 
@@ -140,8 +141,8 @@ wholesale (line ~6552) with no key whitelist. Arbitrary keys in
 
 ### For the producer side (this repo and rpmbuild-pipeline)
 
-- `gather_rpms.py` gains one new CLI flag; validation is explicit and fails
-  loudly on malformed input
+- `gather_rpms.py` gains one new CLI flag; validation is enforced by argparse
+  and fails loudly on malformed input
 - The pipeline and task gain one new optional param; the default is empty for
   backward compatibility
 - No change to existing builds that don't set the param

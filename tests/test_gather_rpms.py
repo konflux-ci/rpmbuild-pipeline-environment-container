@@ -4,7 +4,7 @@ Tests gather_rpms.py.
 
 # pylint: disable=W0201,C0116,R0801
 
-from argparse import Namespace
+from argparse import ArgumentTypeError, Namespace
 import json
 import os
 import shutil
@@ -530,29 +530,29 @@ class TestParseCustomUserMetadata(unittest.TestCase):
     def test_empty_object(self):
         """Test with empty JSON object - returns falsy dict."""
         result = gather_rpms.parse_custom_user_metadata("{}")
-        self.assertEqual(result, {})
+        self.assertIsNone(result)
 
     def test_invalid_json_raises(self):
-        """Test that invalid JSON raises ValueError."""
-        with self.assertRaises(ValueError) as cm:
+        """Test that invalid JSON raises ArgumentTypeError."""
+        with self.assertRaises(ArgumentTypeError) as cm:
             gather_rpms.parse_custom_user_metadata("{bad")
         self.assertIn("not valid JSON", str(cm.exception))
 
     def test_json_array_raises(self):
-        """Test that JSON array raises ValueError."""
-        with self.assertRaises(ValueError) as cm:
+        """Test that JSON array raises ArgumentTypeError."""
+        with self.assertRaises(ArgumentTypeError) as cm:
             gather_rpms.parse_custom_user_metadata("[1, 2, 3]")
         self.assertIn("must be a JSON object", str(cm.exception))
 
     def test_json_string_raises(self):
-        """Test that JSON string raises ValueError."""
-        with self.assertRaises(ValueError) as cm:
+        """Test that JSON string raises ArgumentTypeError."""
+        with self.assertRaises(ArgumentTypeError) as cm:
             gather_rpms.parse_custom_user_metadata('"string"')
         self.assertIn("must be a JSON object", str(cm.exception))
 
     def test_json_number_raises(self):
-        """Test that JSON number raises ValueError."""
-        with self.assertRaises(ValueError) as cm:
+        """Test that JSON number raises ArgumentTypeError."""
+        with self.assertRaises(ArgumentTypeError) as cm:
             gather_rpms.parse_custom_user_metadata('42')
         self.assertIn("must be a JSON object", str(cm.exception))
 
@@ -628,7 +628,7 @@ class TestCreateMdFile(unittest.TestCase):
             start_time=1234567890,
             end_time=1234567900,
             owner=None,
-            custom_user_metadata='{"mr_iid": 496, "target_branch": "rhel-9.6.0"}'
+            custom_user_metadata={"mr_iid": 496, "target_branch": "rhel-9.6.0"}
         )
 
         gather_rpms.create_md_file(options, extra_metadata=None)
@@ -687,8 +687,8 @@ class TestCreateMdFile(unittest.TestCase):
 
     @patch('gather_rpms.calc_checksum')
     @patch('gather_rpms.koji.get_header_fields')
-    def test_custom_user_metadata_empty_string(self, mock_get_header, mock_checksum):
-        """Test that custom_user_metadata is omitted when empty string."""
+    def test_custom_user_metadata_none(self, mock_get_header, mock_checksum):
+        """Test that custom_user_metadata is omitted when None."""
         mock_get_header.return_value = {
             'name': 'test', 'version': '1', 'release': '1.fc42',
             'epoch': None, 'arch': 'x86_64'
@@ -701,7 +701,7 @@ class TestCreateMdFile(unittest.TestCase):
             start_time=1234567890,
             end_time=1234567900,
             owner=None,
-            custom_user_metadata=""
+            custom_user_metadata=None
         )
 
         gather_rpms.create_md_file(options, extra_metadata=None)
@@ -731,7 +731,7 @@ class TestCreateMdFile(unittest.TestCase):
             start_time=1234567890,
             end_time=1234567900,
             owner=None,
-            custom_user_metadata='{"mr_iid": 496}'
+            custom_user_metadata={"mr_iid": 496}
         )
 
         # extra_metadata simulates the KOJI_BUILDROOT_METADATA_FILE content

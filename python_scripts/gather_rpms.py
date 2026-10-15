@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 import os
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 import pprint
 
 import koji
@@ -47,15 +47,22 @@ current_time = datetime.datetime.now()
 
 
 def parse_custom_user_metadata(value):
-    """Parse --custom-user-metadata JSON string; return None if unset/empty."""
+    """Parse custom metadata JSON string for argparse type= validation.
+
+    Returns None if unset/empty/whitespace/empty-object, otherwise returns dict.
+    Raises ArgumentTypeError for invalid JSON or non-object types.
+    """
     if not value or not value.strip():
         return None
     try:
         data = json.loads(value)
     except ValueError as err:
-        raise ValueError(f"--custom-user-metadata is not valid JSON: {err}") from err
+        raise ArgumentTypeError(f"not valid JSON: {err}") from err
     if not isinstance(data, dict):
-        raise ValueError("--custom-user-metadata must be a JSON object")
+        raise ArgumentTypeError("must be a JSON object")
+    # convert all "empty" values to None
+    if not data:
+        return None
     return data
 
 
@@ -268,7 +275,7 @@ def create_md_file(cli_options, extra_metadata=None):
             extra["_export_source"][key] = extra_metadata[key]
 
     # Add custom_user_metadata if provided (stored at top level of extra)
-    custom = parse_custom_user_metadata(getattr(cli_options, "custom_user_metadata", None))
+    custom = getattr(cli_options, "custom_user_metadata", None)
     if custom:
         extra["custom_user_metadata"] = custom
 
@@ -371,15 +378,12 @@ if __name__ == "__main__":
     parser.add_argument("--owner", type=str, default=None,
                         help="Build owner if known")
     parser.add_argument("--custom-user-metadata", action="store", default=None,
+                        type=parse_custom_user_metadata,
                         help="JSON object stored under the build's "
                              "extra.custom_user_metadata field")
     parser.add_argument("-d", "--debug", default=False, action="store_true",
                         help="Debugging output")
     options = parser.parse_args()
-
-    # Validate custom_user_metadata early to fail fast
-    if options.custom_user_metadata:
-        parse_custom_user_metadata(options.custom_user_metadata)
 
     if options.debug:
         logging.basicConfig(level=logging.DEBUG)
