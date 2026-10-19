@@ -8,10 +8,11 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
+import sbom_utils
 from sbom_utils import (
-    to_spdx_license,
     get_generic_purl,
     get_rpm_purl,
+    to_spdx_license,
 )
 
 
@@ -118,7 +119,17 @@ class TestGetRpmPurl(unittest.TestCase):
         self.assertEqual(purl, "pkg:rpm/fedora/python3-pip@21.2.3-7.el9?arch=noarch")
 
 
-class TestToSpdxLicense(unittest.TestCase):
+class LicenseTestCase(unittest.TestCase):
+    """Base class for license tests that manages cache state."""
+
+    def setUp(self):
+        sbom_utils.reset_license_caches()
+
+    def tearDown(self):
+        sbom_utils.reset_license_caches()
+
+
+class TestToSpdxLicense(LicenseTestCase):
     """
     Unit tests for to_spdx_license function.
     """
@@ -131,14 +142,14 @@ class TestToSpdxLicense(unittest.TestCase):
         self.assertEqual(result, "GPL-3.0-or-later")
         mock_run_command.assert_called_once_with(
             ["license-validate", "GPL-3.0-or-later"],
-            timeout=5
+            timeout=15
         )
 
     @patch("sbom_utils.run_command")
     def test_convert_gpl_license(self, mock_run_command):
         """Test converting non-SPDX license via license-fedora2spdx."""
         mock_run_command.side_effect = [
-            MagicMock(returncode=1),
+            subprocess.CalledProcessError(1, ["license-validate", "GPLv3+"]),
             MagicMock(stdout="GPL-3.0-or-later\n", returncode=0),
         ]
         result = to_spdx_license("GPLv3+")
@@ -175,23 +186,27 @@ class TestToSpdxLicense(unittest.TestCase):
 
     @patch("sbom_utils.run_command")
     def test_command_not_found(self, mock_run_command):
-        """Test handling when license-fedora2spdx is not found."""
-        mock_run_command.side_effect = FileNotFoundError("license-fedora2spdx not found")
+        """Test handling when license-validate is not found."""
+        mock_run_command.side_effect = FileNotFoundError("license-validate not found")
         result = to_spdx_license("GPL-2.0")
         self.assertEqual(result, "NOASSERTION")
+        # Should not attempt fedora2spdx conversion when validator is unavailable
+        self.assertEqual(mock_run_command.call_count, 1)
 
     @patch("sbom_utils.run_command")
     def test_timeout(self, mock_run_command):
         """Test handling of command timeout."""
-        mock_run_command.side_effect = subprocess.TimeoutExpired("license-fedora2spdx", 5)
+        mock_run_command.side_effect = subprocess.TimeoutExpired("license-validate", 15)
         result = to_spdx_license("GPL-2.0")
         self.assertEqual(result, "NOASSERTION")
+        # Should not attempt fedora2spdx conversion when validator times out
+        self.assertEqual(mock_run_command.call_count, 1)
 
     @patch("sbom_utils.run_command")
     def test_empty_output(self, mock_run_command):
         """Test handling of empty output from license-fedora2spdx."""
         mock_run_command.side_effect = [
-            MagicMock(returncode=1),
+            subprocess.CalledProcessError(1, ["license-validate", "UnknownLicense"]),
             MagicMock(stdout="", returncode=0),
         ]
         result = to_spdx_license("UnknownLicense")
@@ -201,7 +216,7 @@ class TestToSpdxLicense(unittest.TestCase):
     def test_multiline_output_returns_first_line(self, mock_run_command):
         """Test that only the first line of output is used."""
         mock_run_command.side_effect = [
-            MagicMock(returncode=1),
+            subprocess.CalledProcessError(1, ["license-validate", "GPLv3+"]),
             MagicMock(stdout="GPL-3.0-or-later\nsome extra output\n", returncode=0),
         ]
         result = to_spdx_license("GPLv3+")
@@ -211,11 +226,92 @@ class TestToSpdxLicense(unittest.TestCase):
     def test_blank_first_line_returns_noassertion(self, mock_run_command):
         """Test that a blank first line results in NOASSERTION."""
         mock_run_command.side_effect = [
-            MagicMock(returncode=1),
+            subprocess.CalledProcessError(1, ["license-validate", "SomeLicense"]),
             MagicMock(stdout="  \nactual license\n", returncode=0),
         ]
         result = to_spdx_license("SomeLicense")
         self.assertEqual(result, "NOASSERTION")
+
+    @patch("sbom_utils.run_command")
+    def test_invalid_license_validated_once(self, mock_run_command):
+        """Test that caching works: invalid license validated only once."""
+        mock_run_command.side_effect = [
+            subprocess.CalledProcessError(1, ["license-validate", "GPLv3+"]),
+            MagicMock(stdout="GPL-3.0-or-later\n", returncode=0),
+        ]
+        # Call twice with the same license
+        result1 = to_spdx_license("GPLv3+")
+        result2 = to_spdx_license("GPLv3+")
+        self.assertEqual(result1, "GPL-3.0-or-later")
+        self.assertEqual(result2, "GPL-3.0-or-later")
+        # Should only call run_command twice total (once validate, once convert), not four
+        self.assertEqual(mock_run_command.call_count, 2)
+
+    @patch("sbom_utils.run_command")
+    def test_failed_conversion_cached(self, mock_run_command):
+        """Test that failed conversions are cached."""
+        mock_run_command.side_effect = [
+            subprocess.CalledProcessError(1, ["license-validate", "Bogus"]),
+            subprocess.CalledProcessError(1, ["license-fedora2spdx", "Bogus"]),
+        ]
+        # Call twice with the same invalid license
+        result1 = to_spdx_license("Bogus")
+        result2 = to_spdx_license("Bogus")
+        self.assertEqual(result1, "NOASSERTION")
+        self.assertEqual(result2, "NOASSERTION")
+        # Should only call run_command twice total, not four
+        self.assertEqual(mock_run_command.call_count, 2)
+
+    @patch("sbom_utils.run_command")
+    def test_fedora2spdx_reached(self, mock_run_command):
+        """Test that license-fedora2spdx is actually called for invalid licenses."""
+        mock_run_command.side_effect = [
+            subprocess.CalledProcessError(1, ["license-validate", "GPLv3+"]),
+            MagicMock(stdout="GPL-3.0-or-later\n", returncode=0),
+        ]
+        result = to_spdx_license("GPLv3+")
+        self.assertEqual(result, "GPL-3.0-or-later")
+        # Verify the second call was to license-fedora2spdx
+        self.assertEqual(mock_run_command.call_args_list[1][0][0],
+                         ["license-fedora2spdx", "GPLv3+"])
+
+    @patch("sbom_utils.run_command")
+    def test_usage_error_is_not_invalid(self, mock_run_command):
+        """Test that usage errors (exit 2) don't trigger conversion."""
+        mock_run_command.side_effect = subprocess.CalledProcessError(
+            2, ["license-validate", "GPL-2.0"])
+        result = to_spdx_license("GPL-2.0")
+        self.assertEqual(result, "NOASSERTION")
+        # Should not attempt fedora2spdx conversion
+        self.assertEqual(mock_run_command.call_count, 1)
+
+    @patch("sbom_utils.run_command")
+    def test_multiline_output_logs_notes(self, mock_run_command):
+        """Test that multiline output from fedora2spdx logs important notes."""
+        mock_run_command.side_effect = [
+            subprocess.CalledProcessError(1, ["license-validate", "GPLv3+"]),
+            MagicMock(stdout="GPL-3.0-or-later\nNote: some important info\n", returncode=0),
+        ]
+        with self.assertLogs(level='WARNING') as cm:
+            result = to_spdx_license("GPLv3+")
+        self.assertEqual(result, "GPL-3.0-or-later")
+        # Check that the warning about important notes was logged
+        self.assertTrue(any("important" in msg for msg in cm.output))
+        self.assertTrue(any("some important info" in msg for msg in cm.output))
+
+    @patch("sbom_utils.run_command")
+    def test_warning_logged_once(self, mock_run_command):
+        """Test that warnings are logged only once per distinct license."""
+        mock_run_command.side_effect = [
+            subprocess.CalledProcessError(1, ["license-validate", "BadLicense"]),
+            subprocess.CalledProcessError(1, ["license-fedora2spdx", "BadLicense"]),
+        ]
+        with self.assertLogs(level='WARNING') as cm:
+            to_spdx_license("BadLicense")
+            to_spdx_license("BadLicense")  # Second call
+        critical_count = sum(1 for msg in cm.output if "failed" in msg)
+        # Should only be logged once due to caching
+        self.assertEqual(critical_count, 1)
 
 
 if __name__ == "__main__":
