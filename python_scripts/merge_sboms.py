@@ -17,7 +17,7 @@ import os
 import koji
 
 from common_utils import calc_checksum
-from sbom_utils import to_spdx_license, get_generic_purl, get_rpm_purl
+from sbom_utils import get_generic_purl, get_rpm_purl, log_license_cache_stats, to_spdx_license
 
 
 DEFAULT_CONFIG_PATH = "/etc/rpmbuild_sbom/config.json"
@@ -721,6 +721,8 @@ def _main():
         broot_arch_list_file=args.buildroot_arch_list,
         syft_sbom_dir=args.syft_sbom_dir
     )
+
+    log_license_cache_stats()
 
     # Build output message
     print(f"Generated SBOM from RPMs in: {args.rpm_dir}")
