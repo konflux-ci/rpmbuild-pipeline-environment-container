@@ -1,5 +1,5 @@
 # hadolint global ignore=DL3020,DL3041 # ADD vs COPY, dnf install without specific version
-FROM registry.fedoraproject.org/fedora:44@sha256:cb3bd21415bd82a2fae1a9379f3f972fa8e78d460c9f86101274d13230dd6fd6
+FROM registry.fedoraproject.org/fedora:45@sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
 
@@ -10,7 +10,9 @@ RUN \
     dnf -y --nodocs --setopt=install_weak_deps=False install \
         mock koji dist-git-client patch python3-norpm python3-specfile python3-click redhat-rpm-config \
         acl rpmautospec jq rpmlint podman skopeo dnf-utils license-validate && \
-    patch /usr/lib/python3.14/site-packages/rpmautospec/pkg_history.py < rpmautospec-norpm.patch && \
+    SPECPARSER=$(find /usr/lib -path "*/rpmautospec/specparser.py" -print -quit) && \
+    patch "$SPECPARSER" < rpmautospec-norpm.patch && \
+    grep -q 'parser_type = "norpm"' "$SPECPARSER" && \
     dnf -y clean all && \
     useradd mockbuilder && \
     usermod -a -G mock mockbuilder
@@ -26,12 +28,13 @@ ADD arch-specific-macro-overrides.json /etc/arch-specific-macro-overrides.json
 ADD patch-git-prepare.sh /usr/local/bin
 
 # TODO: Find a better way to ensure that we never execute RPMSpecParser in Konflux.
-RUN sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' \
-    /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
+RUN SPECPARSER=$(find /usr/lib -path "*/rpmautospec/specparser.py" -print -quit) && \
+    sed -i 's/# Note: These calls will alter the results of any subsequent macro expansion/sys.exit(1)/' "$SPECPARSER"
 
 # Assert utility versions
 RUN test "$(rpm --eval '%[ v"'"$(rpm -q --qf '%{VERSION}\n' mock)"'" >= v"6.4" ]')" = "1"
 
 ADD resolv.conf /etc/resolv.conf
 
-RUN grep sys.exit /usr/lib/python3.*/site-packages/rpmautospec/specparser.py
+RUN SPECPARSER=$(find /usr/lib -path "*/rpmautospec/specparser.py" -print -quit) && \
+    grep sys.exit "$SPECPARSER"
