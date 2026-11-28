@@ -1,5 +1,5 @@
 # hadolint global ignore=DL3020,DL3041 # ADD vs COPY, dnf install without specific version
-FROM registry.fedoraproject.org/fedora:45@sha256:e15959f36d52307f176f8c068009f6f1451c3b238b37a1f03e56dbfa4526e8b1
+FROM registry.fedoraproject.org/fedora:45@sha256:1bd80cd53c142fe07d25dac925494e02fa7aec33534ea30440e74f85014359a1
 # https://github.com/containers/buildah/issues/3666#issuecomment-1351992335
 VOLUME /var/lib/containers
 
